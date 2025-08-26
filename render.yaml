@@ -2,7 +2,7 @@ services:
   - type: web
     name: oai-proxy
     env: docker
-    repo: https://gitlab.com/khanon/oai-proxy.git
+    repo: https://github.com/DergotYT/proxy.git
     region: oregon
     plan: free
     branch: main
