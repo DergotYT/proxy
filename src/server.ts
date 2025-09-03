@@ -30,6 +30,9 @@ const PORT = config.port;
 const BIND_ADDRESS = config.bindAddress;
 
 const app = express();
+
+logger.info("Initializing Express server with middleware configuration");
+
 // middleware
 app.use(
   pinoHttp({
@@ -63,7 +66,10 @@ app.use(
   })
 );
 
+logger.info("Pino HTTP logging middleware configured");
+
 app.set("trust proxy", Number(config.trustedProxies));
+logger.info(`Trust proxy set to: ${config.trustedProxies}`);
 
 app.set("view engine", "ejs");
 app.set("views", [
@@ -71,8 +77,11 @@ app.set("views", [
   path.join(__dirname, "user/web/views"),
   path.join(__dirname, "shared/views"),
 ]);
+logger.info("EJS view engine configured");
 
 app.use("/user_content", express.static(USER_ASSETS_DIR, { maxAge: "2h" }));
+logger.info(`Static file serving configured for user content: ${USER_ASSETS_DIR}`);
+
 app.use(
   "/res",
   express.static(path.join(__dirname, "..", "public"), {
@@ -80,40 +89,62 @@ app.use(
     etag: false,
   })
 );
+logger.info("Static file serving configured for public resources");
 
-app.get("/health", (_req, res) => res.sendStatus(200));
+app.get("/health", (_req, res) => {
+  logger.debug("Health check endpoint called");
+  res.sendStatus(200);
+});
+
 app.use(cors());
+logger.info("CORS middleware configured");
 
 const blacklist = createBlacklistMiddleware("IP_BLACKLIST", config.ipBlacklist);
 app.use(blacklist);
+logger.info("IP blacklist middleware configured");
 
 // Country-based blocking middleware
 if (config.enableCountryBlocking) {
+  logger.info("Country blocking enabled, configuring middleware");
   const countryBlocking = createCountryBlockingMiddleware(
     config.blockedCountries,
     config.allowedCountries,
     config.ipinfoToken
   );
   app.use(countryBlocking);
+  logger.info("Country blocking middleware configured");
+} else {
+  logger.info("Country blocking is disabled");
 }
 
 app.use(checkOrigin);
+logger.info("Origin checking middleware configured");
 
 app.use("/admin", adminRouter);
+logger.info("Admin routes configured");
+
 app.use((req, _, next) => {
   // For whatever reason SillyTavern just ignores the path a user provides
   // when using Google AI with reverse proxy.  We'll fix it here.
   if (req.path.match(/^\/v1(alpha|beta)\/models(\/|$)/)) {
+    logger.debug(`Redirecting Google AI models request: ${req.url}`);
     req.url = `${config.proxyEndpointRoute}/google-ai${req.url}`;
     return next();
   }
   next();
 });
+
 app.use(config.proxyEndpointRoute, proxyRouter);
+logger.info(`Proxy routes configured at: ${config.proxyEndpointRoute}`);
+
 app.use("/user", userRouter);
+logger.info("User routes configured");
+
 if (config.staticServiceInfo) {
+  logger.info("Static service info enabled, setting up basic root endpoint");
   app.get("/", (_req, res) => res.sendStatus(200));
 } else {
+  logger.info("Dynamic service info enabled, setting up info page router");
   app.use("/", infoPageRouter);
 }
 
@@ -121,6 +152,8 @@ app.use(
   (err: any, req: express.Request, res: express.Response, _next: unknown) => {
     if (!err.status) {
       logger.error(err, "Unhandled error in request");
+    } else {
+      logger.warn({ err, status: err.status }, "Handled error in request");
     }
 
     sendErrorToClient({
@@ -138,7 +171,10 @@ app.use(
     });
   }
 );
+logger.info("Error handling middleware configured");
+
 app.use((_req: unknown, res: express.Response) => {
+  logger.warn("404 Not Found response sent");
   res.status(404).json({ error: "Not found" });
 });
 
@@ -148,6 +184,7 @@ async function start() {
 
   logger.info("Checking configs and external dependencies...");
   await assertConfigIsValid();
+  logger.info("Config validation passed");
 
   if (config.gatekeeperStore.startsWith("firebase")) {
     logger.info("Testing Firebase connection...");
@@ -155,31 +192,44 @@ async function start() {
     logger.info("Firebase connection successful.");
   }
 
+  logger.info("Initializing key pool...");
   keyPool.init();
+  logger.info("Key pool initialized");
 
+  logger.info("Initializing tokenizers...");
   await initTokenizers();
+  logger.info("Tokenizers initialized");
 
   if (config.allowedModelFamilies.some((f) => IMAGE_GEN_MODELS.includes(f))) {
+    logger.info("Setting up assets directory for image generation models");
     await setupAssetsDir();
+    logger.info("Assets directory setup complete");
   }
 
   if (config.gatekeeper === "user_token") {
+    logger.info("Initializing user store for token-based authentication");
     await initUserStore();
+    logger.info("User store initialized");
   }
 
   if (config.promptLogging) {
     logger.info("Starting prompt logging...");
     await logQueue.start();
+    logger.info("Prompt logging started");
   }
 
+  logger.info("Initializing database...");
   await initializeDatabase();
+  logger.info("Database initialized");
 
   logger.info("Starting request queue...");
   startRequestQueue();
+  logger.info("Request queue started");
 
   const diskSpace = await checkDiskSpace(
     __dirname.startsWith("/app") ? "/app" : os.homedir()
   );
+  logger.info({ diskSpace }, "Disk space check completed");
 
   app.listen(PORT, BIND_ADDRESS, () => {
     logger.info(
@@ -196,18 +246,21 @@ async function start() {
 }
 
 function cleanup() {
-  console.log("Shutting down...");
+  logger.info("Shutting down server...");
   if (config.eventLogging) {
     try {
       const db = getDatabase();
       db.close();
-      console.log("Closed sqlite database.");
-    } catch (error) {}
+      logger.info("Closed SQLite database.");
+    } catch (error) {
+      logger.error({ error }, "Failed to close SQLite database");
+    }
   }
   process.exit(0);
 }
 
 process.on("SIGINT", cleanup);
+logger.info("SIGINT handler registered for graceful shutdown");
 
 function registerUncaughtExceptionHandler() {
   process.on("uncaughtException", (err: any) => {
@@ -222,6 +275,7 @@ function registerUncaughtExceptionHandler() {
       "UNCAUGHT PROMISE REJECTION. Please report this error trace."
     );
   });
+  logger.info("Uncaught exception handlers registered");
 }
 
 /**
@@ -232,6 +286,8 @@ function registerUncaughtExceptionHandler() {
  * didn't set it to something misleading.
  */
 async function setBuildInfo() {
+  logger.info("Attempting to collect build information");
+  
   // For CI builds, use the env vars set during the build process
   if (process.env.GITGUD_BRANCH) {
     const sha = process.env.GITGUD_COMMIT?.slice(0, 7) || "unknown SHA";
@@ -256,8 +312,10 @@ async function setBuildInfo() {
 
   // For huggingface and bare metal deployments, we can get the info from git
   try {
+    logger.info("Attempting to get build info from Git repository");
+    
     if (process.env.SPACE_ID) {
-      // TODO: may not be necessary anymore with adjusted Huggingface dockerfile
+      logger.debug("Configuring Git safe directory for Huggingface Space");
       childProcess.execSync("git config --global --add safe.directory /app");
     }
 
@@ -296,10 +354,10 @@ async function setBuildInfo() {
         stdout: error.stdout?.toString(),
         stderr: error.stderr?.toString(),
       },
-      "Failed to get commit SHA.",
-      error
+      "Failed to get commit SHA."
     );
     process.env.BUILD_INFO = "unknown";
+    logger.warn("Using default build info: unknown");
   }
 }
 
