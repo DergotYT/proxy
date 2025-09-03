@@ -287,7 +287,7 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
       keyPool.disable(req.key!, "quota");
       await reenqueueRequest(req);
       throw new RetryableError("Deepseek key has insufficient balance, retrying with different key.");
-    },
+    }
     if (service === "openrouterai") {
       keyPool.disable(req.key!, "quota");
       await reenqueueRequest(req);
