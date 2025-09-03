@@ -214,7 +214,7 @@ export class KeyPool {
     } else if (model.includes("xai")) {
       return "xai";
     } else if (model.includes("openrouter")) {
-      return "openrouter";
+      return "anthropic/claude-sonnet-4";
     } else if (model.includes("command") || model.includes("cohere")) {
       return "cohere";
     } else if (model.includes("qwen")) {
