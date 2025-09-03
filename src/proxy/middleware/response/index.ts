@@ -341,6 +341,28 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
             errorPayload.proxy_note = `Received 403 error. Key may be invalid.`;
         }
         return;
+		case "openrouter":
+			// Специальная обработка для ошибок модерации OpenRouter
+			if (errorPayload.error?.message?.includes("requires moderation") || 
+				errorPayload.error?.message?.includes("moderation")) {
+			  // Это ошибка модерации, не отключаем ключ
+			  errorPayload.proxy_note = `Content moderation error: ${errorPayload.error.message}. The key remains active.`;
+			  req.log.warn(
+				{ key: req.key?.hash, message: errorPayload.error.message },
+				"OpenRouter content moderation error, key remains enabled"
+			  );
+        // Не отключаем ключ, просто возвращаем ошибку пользователю
+			} else {
+			// Другие 403 ошибки - отключаем ключ
+				req.log.warn(
+					{ key: req.key?.hash, message: errorPayload.error?.message },
+					"OpenRouter key is invalid or revoked, marking as revoked"
+				);
+				keyPool.disable(req.key!, "revoked");
+				await reenqueueRequest(req);
+				throw new RetryableError("OpenRouter key is invalid, retrying with different key.");
+		}
+		break;
       case "mistral-ai":
       case "gcp":
         keyPool.disable(req.key!, "revoked");
