@@ -11,7 +11,7 @@ export interface OpenrouteraiKey extends Key {
   isOverQuota: boolean;
 }
 
-export class OpenrouteraiKeyProvider implements KeyProvider<OpenrouterKey> {
+export class OpenrouteraiKeyProvider implements KeyProvider<OpenrouteraiKey> {
   readonly service = "openrouterai";
 
   private keys: OpenrouteraiKey[] = [];

@@ -74,7 +74,7 @@ const openrouteraiResponseHandler: ProxyResHandlerWithBody = async (
     const model = req.body.model;
     req.log.debug(`Processing chat completion response for model: ${model}`);
     
-    if (isGrokReasoningContentModel(model)) {
+    if (isOpenrouteraiReasoningContentModel(model)) {
       body.choices.forEach(choice => {
         if (choice.message && choice.message.reasoning_content) {
           req.log.debug(
@@ -105,7 +105,7 @@ const getModelsResponse = async () => {
     const modelToUse = "deepseek/deepseek-chat-v3.1:free";
     const openrouteraiKey = keyPool.get(modelToUse, "openrouterai") as OpenrouteraiKey;
     
-    if (!openrouterKey || !openrouterKey.key) {
+    if (!openrouteraiKey || !openrouteraiKey.key) {
       console.error("Failed to get valid OpenRouter key");
       throw new Error("Failed to get valid openrouter key");
     }
@@ -200,7 +200,7 @@ function redirectImageRequests(req: Request) {
   req.log.debug("Checking for image generation redirection");
   const model = req.body.model;
   
-  if (isGrokImageGenModel(model) && req.path === "/v1/chat/completions") {
+  if (isOpenrouteraiImageGenModelImageGenModel(model) && req.path === "/v1/chat/completions") {
     req.log.info(`Redirecting ${model} request to /v1/images/generations endpoint`);
     
     const originalUrl = req.url;
@@ -246,8 +246,8 @@ function removeUnsupportedParameters(req: Request) {
   req.log.debug("Checking for unsupported parameters");
   const model = req.body.model;
   
-  const isReasoningModel = isGrokReasoningModel(model);
-  const isReasoningEffortModel = isGrokReasoningEffortModel(model);
+  const isReasoningModel = isOpenrouteraiReasoningModel(model);
+  const isReasoningEffortModel = isOpenrouteraiReasoningEffortModel(model);
   
   if (isReasoningModel) {
     req.log.debug("Processing reasoning model parameters");
@@ -284,7 +284,7 @@ function removeUnsupportedParameters(req: Request) {
     }
   }
   
-  if (isGrokVisionModel(model)) {
+  if (isOpenrouteraiVisionModel(model)) {
     req.log.debug(`Processing vision model: ${model}`);
     
     if (req.body.messages && Array.isArray(req.body.messages)) {
@@ -337,7 +337,7 @@ function countOpenrouteraiTokens(req: Request) {
   req.log.debug("Counting OpenRouter tokens");
   const model = req.body.model;
   
-  if (isGrokVisionModel(model) && req.body.messages && Array.isArray(req.body.messages)) {
+  if (isOpenrouteraiVisionModel(model) && req.body.messages && Array.isArray(req.body.messages)) {
     let imageCount = 0;
     
     for (const msg of req.body.messages) {

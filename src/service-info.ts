@@ -115,7 +115,7 @@ const MODEL_FAMILY_ORDER: ModelFamily[] = [
   // Other services
   "deepseek",
   "xai",
-  "openrouter",
+  "openrouterai",
   "cohere",
   "qwen",
   "moonshot"
