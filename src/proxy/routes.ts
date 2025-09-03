@@ -20,17 +20,17 @@ import { sendErrorToClient } from "./middleware/response/error-generator";
 
 const proxyRouter = express.Router();
 
-console.log("Initializing proxy router...");
+// Log initialization
+console.log("Initializing proxy router with middleware and routes");
 
 // Remove `expect: 100-continue` header from requests due to incompatibility
 // with node-http-proxy.
 proxyRouter.use((req, _res, next) => {
-  console.log(`Processing request: ${req.method} ${req.originalUrl}`);
-  console.log(`User-Agent: ${req.headers["user-agent"]}`);
-  
+  req.log?.info("Removing 'expect: 100-continue' header from request");
   if (req.headers.expect) {
-    console.log(`Removing 'expect' header: ${req.headers.expect}`);
+    req.log?.debug(`Found expect header: ${req.headers.expect}`);
     delete req.headers.expect;
+    req.log?.debug("Expect header removed successfully");
   }
   next();
 });
@@ -40,117 +40,117 @@ proxyRouter.use(
   express.json({ limit: "100mb" }),
   express.urlencoded({ extended: true, limit: "100mb" })
 );
-
 console.log("Body parsers configured with 100MB limit");
 
 // Apply auth/rate limits.
-console.log("Applying gatekeeper middleware...");
 proxyRouter.use(gatekeeper);
-console.log("Applying RisuToken check middleware...");
 proxyRouter.use(checkRisuToken);
+console.log("Authentication and rate limiting middleware added");
 
 // Initialize request queue metadata.
 proxyRouter.use((req, _res, next) => {
+  req.log?.info("Initializing request queue metadata");
   req.startTime = Date.now();
   req.retryCount = 0;
-  console.log(`Request initialized - startTime: ${req.startTime}, retryCount: ${req.retryCount}`);
+  req.log?.debug({ startTime: req.startTime, retryCount: req.retryCount }, "Request metadata initialized");
   next();
 });
 
 // Proxy endpoints with detailed logging
-console.log("Setting up proxy endpoints:");
-proxyRouter.use("/openai", (req, res, next) => {
-  console.log(`Routing to OpenAI: ${req.method} ${req.originalUrl}`);
+console.log("Configuring proxy endpoints:");
+proxyRouter.use("/openai", addV1, (req, res, next) => {
+  req.log?.info("Routing to OpenAI endpoint");
   next();
-}, addV1, openai);
+}, openai);
 
-proxyRouter.use("/openai-image", (req, res, next) => {
-  console.log(`Routing to OpenAI Image: ${req.method} ${req.originalUrl}`);
+proxyRouter.use("/openai-image", addV1, (req, res, next) => {
+  req.log?.info("Routing to OpenAI Image endpoint");
   next();
-}, addV1, openaiImage);
+}, openaiImage);
 
-proxyRouter.use("/anthropic", (req, res, next) => {
-  console.log(`Routing to Anthropic: ${req.method} ${req.originalUrl}`);
+proxyRouter.use("/anthropic", addV1, (req, res, next) => {
+  req.log?.info("Routing to Anthropic endpoint");
   next();
-}, addV1, anthropic);
+}, anthropic);
 
-proxyRouter.use("/google-ai", (req, res, next) => {
-  console.log(`Routing to Google AI: ${req.method} ${req.originalUrl}`);
+proxyRouter.use("/google-ai", addV1, (req, res, next) => {
+  req.log?.info("Routing to Google AI endpoint");
   next();
-}, addV1, googleAI);
+}, googleAI);
 
-proxyRouter.use("/mistral-ai", (req, res, next) => {
-  console.log(`Routing to Mistral AI: ${req.method} ${req.originalUrl}`);
+proxyRouter.use("/mistral-ai", addV1, (req, res, next) => {
+  req.log?.info("Routing to Mistral AI endpoint");
   next();
-}, addV1, mistralAI);
+}, mistralAI);
 
 proxyRouter.use("/aws", (req, res, next) => {
-  console.log(`Routing to AWS: ${req.method} ${req.originalUrl}`);
+  req.log?.info("Routing to AWS endpoint");
   next();
 }, aws);
 
-proxyRouter.use("/gcp/claude", (req, res, next) => {
-  console.log(`Routing to GCP Claude: ${req.method} ${req.originalUrl}`);
+proxyRouter.use("/gcp/claude", addV1, (req, res, next) => {
+  req.log?.info("Routing to GCP Claude endpoint");
   next();
-}, addV1, gcp);
+}, gcp);
 
-proxyRouter.use("/azure/openai", (req, res, next) => {
-  console.log(`Routing to Azure OpenAI: ${req.method} ${req.originalUrl}`);
+proxyRouter.use("/azure/openai", addV1, (req, res, next) => {
+  req.log?.info("Routing to Azure OpenAI endpoint");
   next();
-}, addV1, azure);
+}, azure);
 
-proxyRouter.use("/deepseek", (req, res, next) => {
-  console.log(`Routing to DeepSeek: ${req.method} ${req.originalUrl}`);
+proxyRouter.use("/deepseek", addV1, (req, res, next) => {
+  req.log?.info("Routing to DeepSeek endpoint");
   next();
-}, addV1, deepseek);
+}, deepseek);
 
-proxyRouter.use("/xai", (req, res, next) => {
-  console.log(`Routing to XAI: ${req.method} ${req.originalUrl}`);
+proxyRouter.use("/xai", addV1, (req, res, next) => {
+  req.log?.info("Routing to XAI endpoint");
   next();
-}, addV1, xai);
+}, xai);
 
-proxyRouter.use("/openrouter", (req, res, next) => {
-  console.log(`Routing to OpenRouter: ${req.method} ${req.originalUrl}`);
+proxyRouter.use("/openrouter", addV1, (req, res, next) => {
+  req.log?.info("Routing to OpenRouter endpoint");
   next();
-}, addV1, openrouter);
+}, openrouter);
 
-proxyRouter.use("/cohere", (req, res, next) => {
-  console.log(`Routing to Cohere: ${req.method} ${req.originalUrl}`);
+proxyRouter.use("/cohere", addV1, (req, res, next) => {
+  req.log?.info("Routing to Cohere endpoint");
   next();
-}, addV1, cohere);
+}, cohere);
 
-proxyRouter.use("/qwen", (req, res, next) => {
-  console.log(`Routing to Qwen: ${req.method} ${req.originalUrl}`);
+proxyRouter.use("/qwen", addV1, (req, res, next) => {
+  req.log?.info("Routing to Qwen endpoint");
   next();
-}, addV1, qwen);
+}, qwen);
 
-proxyRouter.use("/moonshot", (req, res, next) => {
-  console.log(`Routing to Moonshot: ${req.method} ${req.originalUrl}`);
+proxyRouter.use("/moonshot", addV1, (req, res, next) => {
+  req.log?.info("Routing to Moonshot endpoint");
   next();
-}, addV1, moonshot);
+}, moonshot);
 
-console.log("All proxy endpoints configured");
+console.log("All proxy endpoints configured successfully");
 
 // Redirect browser requests to the homepage.
 proxyRouter.get("*", (req, res, next) => {
-  console.log(`Checking if request is from browser: ${req.originalUrl}`);
+  req.log?.info("Checking if request is from browser");
   const isBrowser = req.headers["user-agent"]?.includes("Mozilla");
-  console.log(`Is browser request: ${isBrowser}`);
   
   if (isBrowser) {
-    console.log(`Redirecting browser request to homepage: ${req.originalUrl}`);
+    req.log?.info("Browser detected, redirecting to homepage");
     res.redirect("/");
   } else {
-    console.log(`Non-browser request, continuing: ${req.originalUrl}`);
+    req.log?.info("Non-browser request, continuing to next middleware");
     next();
   }
 });
 
 // Send a fake client error if user specifies an invalid proxy endpoint.
 proxyRouter.use((req, res) => {
-  console.error(`Invalid proxy endpoint requested: ${req.originalUrl}`);
-  console.error(`Request body: ${JSON.stringify(req.body)}`);
-  console.error(`Request method: ${req.method}`);
+  req.log?.warn("Invalid proxy endpoint requested", {
+    originalUrl: req.originalUrl,
+    method: req.method,
+    body: req.body
+  });
   
   sendErrorToClient({
     req,
@@ -170,5 +170,5 @@ proxyRouter.use((req, res) => {
   });
 });
 
-console.log("Proxy router setup completed");
+console.log("Proxy router configuration completed");
 export { proxyRouter as proxyRouter };
