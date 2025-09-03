@@ -17,8 +17,37 @@ const openrouterResponseHandler: ProxyResHandlerWithBody = async (
   res,
   body
 ) => {
+  // Handle cases where body might be a string instead of JSON object
+  if (typeof body === 'string') {
+    try {
+      // Try to parse the string as JSON
+      body = JSON.parse(body);
+    } catch (e) {
+      // If parsing fails, create a proper error response
+      req.log.warn({ body }, "OpenRouter returned non-JSON response");
+      return res.status(200).json({
+        error: {
+          message: "OpenRouter returned non-JSON response",
+          type: "invalid_response"
+        },
+        proxy: {
+          note: "OpenRouter returned a string response instead of JSON"
+        }
+      });
+    }
+  }
+
   if (typeof body !== "object") {
-    throw new Error("Expected body to be an object");
+    req.log.error({ body }, "OpenRouter returned non-object response");
+    return res.status(200).json({
+      error: {
+        message: "OpenRouter returned invalid response format",
+        type: "invalid_response_format"
+      },
+      proxy: {
+        note: "Expected response to be an object"
+      }
+    });
   }
 
   // Preserve the original body (including potential reasoning_content) for grok-3-mini models
