@@ -19,7 +19,7 @@ export class OpenrouterKeyProvider implements KeyProvider<OpenrouterKey> {
   private log = logger.child({ module: "key-provider", service: this.service });
 
   constructor() {
-    const keyConfig = config.openrouterKeyKey?.trim();
+    const keyConfig = config.openrouterKey?.trim();
     if (!keyConfig) {
       return;
     }

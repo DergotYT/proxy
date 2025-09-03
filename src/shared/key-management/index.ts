@@ -103,7 +103,7 @@ export { MistralAIKey } from "./mistral-ai/provider";
 export { OpenAIKey } from "./openai/provider";
 export { DeepseekKey } from "./deepseek/provider";
 export { XaiKey } from "./xai/provider";
-export { XaiKey } from "./openrouter/provider";
+export { OpenrouterKey } from "./openrouter/provider";
 export { CohereKey } from "./cohere/provider";
 export { QwenKey } from "./qwen/provider";
 export { MoonshotKey } from "./moonshot/provider";
