@@ -17,57 +17,43 @@ const openrouterResponseHandler: ProxyResHandlerWithBody = async (
   res,
   body
 ) => {
-  // Handle cases where body might be a string instead of JSON object
+  let responseBody = body;
+  
+  // Если тело ответа — строка, пытаемся распарсить её как JSON
   if (typeof body === 'string') {
     try {
-      // Try to parse the string as JSON
-      body = JSON.parse(body);
+      responseBody = JSON.parse(body);
     } catch (e) {
-      // If parsing fails, create a proper error response
-      req.log.warn({ body }, "OpenRouter returned non-JSON response");
-      return res.status(200).json({
+      // Если не удалось распарсить, создаём объект ошибки
+      responseBody = {
         error: {
-          message: "OpenRouter returned non-JSON response",
-          type: "invalid_response"
-        },
-        proxy: {
-          note: "OpenRouter returned a string response instead of JSON"
+          message: body,
+          type: 'invalid_response'
         }
-      });
+      };
     }
   }
 
-  if (typeof body !== "object") {
-    req.log.error({ body }, "OpenRouter returned non-object response");
-    return res.status(200).json({
-      error: {
-        message: "OpenRouter returned invalid response format",
-        type: "invalid_response_format"
-      },
-      proxy: {
-        note: "Expected response to be an object"
-      }
-    });
+  if (typeof responseBody !== "object") {
+    throw new Error("Expected body to be an object");
   }
 
-  // Preserve the original body (including potential reasoning_content) for grok-3-mini models
-  // which support the reasoning feature
-  let newBody = body;
+  // Preserve the original body (including potential reasoning_content)
+  let newBody = responseBody;
   
   // Check if this is an image generation response (data array with url or b64_json)
-  if (body.data && Array.isArray(body.data)) {
+  if (responseBody.data && Array.isArray(responseBody.data)) {
     req.log.debug(
-      { imageCount: body.data.length },
-      "Grok image generation response detected"
+      { imageCount: responseBody.data.length },
+      "OpenRouter image generation response detected"
     );
     
     // Transform the image generation response into a chat completion format
-    // that SillyTavern can display
-    const images = body.data;
+    const images = responseBody.data;
     
     // Create a chat completion style response
     newBody = {
-      id: `grok-image-${Date.now()}`,
+      id: `openrouter-image-${Date.now()}`,
       object: "chat.completion",
       created: Math.floor(Date.now() / 1000),
       model: req.body.model,
@@ -77,7 +63,6 @@ const openrouterResponseHandler: ProxyResHandlerWithBody = async (
         
         // Add the image using data URL for b64_json
         if (image.b64_json) {
-          // If it doesn't start with data:image/, add the prefix
           const imgData = image.b64_json.startsWith('data:image/') 
             ? image.b64_json 
             : `data:image/jpeg;base64,${image.b64_json}`;
@@ -98,29 +83,28 @@ const openrouterResponseHandler: ProxyResHandlerWithBody = async (
           finish_reason: "stop"
         };
       }),
-      usage: body.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+      usage: responseBody.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
     };
     
     req.log.debug("Transformed image generation response to chat format");
   }
   // Check if this is a chat completion response with choices
-  else if (body.choices && Array.isArray(body.choices) && body.choices.length > 0) {
-    // Make sure each choice's message is preserved, especially reasoning_content
-    // Only grok-3-mini models return reasoning_content
+  else if (responseBody.choices && Array.isArray(responseBody.choices) && responseBody.choices.length > 0) {
+    // Make sure each choice's message is preserved
     const model = req.body.model;
     if (isOpenrouterReasoningContentModel(model)) {
-      body.choices.forEach(choice => {
+      responseBody.choices.forEach(choice => {
         if (choice.message && choice.message.reasoning_content) {
           req.log.debug(
             { reasoning_length: choice.message.reasoning_content.length },
-            "Grok reasoning content detected"
+            "OpenRouter reasoning content detected"
           );
         }
       });
     }
   }
 
-  res.status(200).json({ ...newBody, proxy: body.proxy });
+  res.status(200).json({ ...newBody, proxy: responseBody.proxy });
 };
 
 const getModelsResponse = async () => {
@@ -130,15 +114,15 @@ const getModelsResponse = async () => {
   }
 
   try {
-    // Get an XAI key directly using keyPool.get()
-    const modelToUse = "grok-3"; // Use any XAI model here - just for key selection
+    // Get an OpenRouter key directly using keyPool.get()
+    const modelToUse = "anthropic/claude-sonnet-4"; // Use any OpenRouter model here
     const openrouterKey = keyPool.get(modelToUse, "openrouter") as OpenrouterKey;
     
     if (!openrouterKey || !openrouterKey.key) {
-      throw new Error("Failed to get valid Openrouter key");
+      throw new Error("Failed to get valid OpenRouter key");
     }
 
-    // Fetch models from XAI API with authorization
+    // Fetch models from OpenRouter API with authorization
     const response = await axios.get("https://openrouter.ai/api/v1/models", {
       headers: {
         "Content-Type": "application/json",
@@ -147,21 +131,21 @@ const getModelsResponse = async () => {
     });
 
     // If successful, update the cache
-    if (response.data && response.data.data) {
+    if (response.data && Array.isArray(response.data)) {
       modelsCache = {
         object: "list",
-        data: response.data.data.map((model: any) => ({
+        data: response.data.map((model: any) => ({
           id: model.id,
           object: "model",
-          owned_by: "openrouter",
+          owned_by: model.organization || "openrouter",
         })),
       };
     } else {
-      throw new Error("Unexpected response format from Openrouter API");
+      throw new Error("Unexpected response format from OpenRouter API");
     }
   } catch (error) {
-    console.error("Error fetching Openrouter models:", error);
-    throw error; // No fallback - error will be passed to caller
+    console.error("Error fetching OpenRouter models:", error);
+    throw error;
   }
 
   modelsCacheTime = new Date().getTime();
@@ -334,15 +318,16 @@ function removeUnsupportedParameters(req: Request) {
 // Handler for image generation requests
 const handleImageGenerationRequest: RequestHandler = async (req, res) => {
   try {
-    // Get an Openrouter key directly for image generation
-    const modelToUse = req.body.model || "grok-2-image"; // Default model
+    // OpenRouter doesn't have a dedicated image generation endpoint like XAI
+    // We'll use the chat completions endpoint with a special model
+    const modelToUse = req.body.model || "stability-ai/stable-diffusion-xl"; // Default model
     const openrouterKey = keyPool.get(modelToUse, "openrouter") as OpenrouterKey;
     
     if (!openrouterKey || !openrouterKey.key) {
-      throw new Error("Failed to get valid Openrouter key for image generation");
+      throw new Error("Failed to get valid OpenRouter key for image generation");
     }
     
-    // Forward the request to Openrouter API
+    // Forward the request to OpenRouter API's chat completions endpoint
     const response = await axios.post("https://openrouter.ai/api/v1/chat/completions", req.body, {
       headers: {
         "Content-Type": "application/json",
