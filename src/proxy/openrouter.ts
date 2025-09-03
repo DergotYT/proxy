@@ -373,7 +373,7 @@ function countOpenrouterTokens(req: Request) {
 }
 
 openrouterRouter.post(
-  "/v1/chat/completions",
+  "/chat/completions",
   ipLimiter,
   createPreprocessorMiddleware(
     { inApi: "openai", outApi: "openai", service: "openrouter" },
@@ -384,7 +384,7 @@ openrouterRouter.post(
 
 // Add endpoint for image generation
 openrouterRouter.post(
-  "/v1/images/generations",
+  "/images/generations",
   ipLimiter,
   handleImageGenerationRequest
 );
