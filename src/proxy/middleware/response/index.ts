@@ -281,42 +281,53 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
     keyPool.disable(req.key!, "revoked");
     await reenqueueRequest(req);
     throw new RetryableError(`${service} key authentication failed, retrying with different key.`);
-  } else if (statusCode === 402) {
-    // Deepseek specific - insufficient balance
-    if (service === "deepseek") {
-      keyPool.disable(req.key!, "quota");
-      await reenqueueRequest(req);
-      throw new RetryableError("Deepseek key has insufficient balance, retrying with different key.");
-    }
-    if (service === "openrouter") {
-      keyPool.disable(req.key!, "quota");
-      await reenqueueRequest(req);
-      throw new RetryableError("Openrouter key has insufficient balance, retrying with different key.");
-    }
-  } else if (statusCode === 405) {
-    // Xai specific - insufficient balance
-    if (service === "xai") {
-      keyPool.disable(req.key!, "quota");
-      await reenqueueRequest(req);
-      throw new RetryableError("XAI key has insufficient balance, retrying with different key.");
-    }
-  } else if (statusCode === 403) {
-    switch (service) {
-      case "anthropic":
-        if (
-          errorType === "permission_error" &&
-          errorPayload.error?.message?.toLowerCase().includes("multimodal")
-        ) {
-          keyPool.update(req.key!, { allowsMultimodality: false });
-          await reenqueueRequest(req);
-          throw new RetryableError(
-            "Claude request re-enqueued because key does not support multimodality."
-          );
-        } else {
-          keyPool.disable(req.key!, "revoked");
-          errorPayload.proxy_note = `Assigned API key is invalid or revoked, please try again.`;
-        }
-        return;
+	} else if (statusCode === 402) {
+	  // OpenRouter specific - insufficient credits
+	  if (service === "openrouter") {
+		const errorMessage = errorPayload.error?.message || '';
+		
+		// Проверяем тип ошибки 402
+		if (errorMessage.includes("Insufficient credits") || 
+			errorMessage.includes("requires more credits")) {
+		  // Это ошибка недостатка кредитов - не отключаем ключ, просто показываем ошибку
+		  errorPayload.proxy_note = `OpenRouter: ${errorMessage}`;
+		} else {
+		  // Другие ошибки 402 - отключаем ключ
+		  keyPool.disable(req.key!, "quota");
+		  await reenqueueRequest(req);
+		  throw new RetryableError("Openrouter key has insufficient balance, retrying with different key.");
+		}
+	  }
+	  // Deepseek specific - insufficient balance
+	  if (service === "deepseek") {
+		keyPool.disable(req.key!, "quota");
+		await reenqueueRequest(req);
+		throw new RetryableError("Deepseek key has insufficient balance, retrying with different key.");
+	  }
+	} else if (statusCode === 403) {
+	  switch (service) {
+		case "anthropic":
+		  if (
+			errorType === "permission_error" &&
+			errorPayload.error?.message?.toLowerCase().includes("multimodal")
+		  ) {
+			keyPool.update(req.key!, { allowsMultimodality: false });
+			await reenqueueRequest(req);
+			throw new RetryableError(
+			  "Claude request re-enqueued because key does not support multimodality."
+			);
+		  } else {
+			// Проверяем, является ли это ошибкой модерации OpenRouter
+			const errorMessage = errorPayload.error?.message || '';
+			if (errorMessage.includes("moderation") || errorMessage.includes("flagged")) {
+			  // Ошибка модерации - не отключаем ключ
+			  errorPayload.proxy_note = `OpenRouter moderation error: ${errorMessage}`;
+			} else {
+			  keyPool.disable(req.key!, "revoked");
+			  errorPayload.proxy_note = `Assigned API key is invalid or revoked, please try again.`;
+			}
+		  }
+		  return;
       case "aws":
         switch (errorType) {
           case "UnrecognizedClientException":
@@ -341,26 +352,17 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
             errorPayload.proxy_note = `Received 403 error. Key may be invalid.`;
         }
         return;
-		case "openrouter":
-			// Специальная обработка для ошибок модерации OpenRouter
-			if (errorPayload.error?.message?.includes("requires moderation") || 
-				errorPayload.error?.message?.includes("moderation")) {
-			  // Это ошибка модерации, не отключаем ключ
-			  errorPayload.proxy_note = `Content moderation error: ${errorPayload.error.message}. The key remains active.`;
-			  req.log.warn(
-				{ key: req.key?.hash, message: errorPayload.error.message },
-				"OpenRouter content moderation error, key remains enabled"
-			  );
-        // Не отключаем ключ, просто возвращаем ошибку пользователю
-			} else {
-			// Другие 403 ошибки - отключаем ключ
-				req.log.warn(
-					{ key: req.key?.hash, message: errorPayload.error?.message },
-					"OpenRouter key is invalid or revoked, marking as revoked"
-				);
-				keyPool.disable(req.key!, "revoked");
-				await reenqueueRequest(req);
-				throw new RetryableError("OpenRouter key is invalid, retrying with different key.");
+	  case "openrouter":
+		// Проверяем, является ли это ошибкой модерации
+		const errorMessage = errorPayload.error?.message || '';
+		if (errorMessage.includes("moderation") || errorMessage.includes("flagged")) {
+        // Ошибка модерации - не отключаем ключ
+			errorPayload.proxy_note = `OpenRouter moderation error: ${errorMessage}`;
+		} else {
+			// Другие ошибки 403 - отключаем ключ
+			keyPool.disable(req.key!, "revoked");
+			await reenqueueRequest(req);
+			throw new RetryableError("Openrouter key is invalid, retrying with different key.");
 		}
 		break;
       case "mistral-ai":
