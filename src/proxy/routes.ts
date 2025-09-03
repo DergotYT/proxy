@@ -156,7 +156,7 @@ proxyRouter.use((req, res) => {
     req,
     res,
     options: {
-      title: "Proxy error (HTTP 404 Not Found)",
+      title: "Proxy error (HTTP 404 Not Found) {originalUrl} {req.originalUrl}",
       message: "The requested proxy endpoint does not exist.",
       model: req.body?.model,
       reqId: req.id,
