@@ -1,25 +1,25 @@
 import { Key, KeyProvider, createGenericGetLockoutPeriod } from "..";
-import { OpenrouterKeyChecker } from "./checker";
+import { OpenrouteraiKeyChecker } from "./checker";
 import { config } from "../../../config";
 import { logger } from "../../../logger";
-import { OpenrouterModelFamily, ModelFamily } from "../../models"; // Added ModelFamily
+import { OpenrouteraiModelFamily, ModelFamily } from "../../models"; // Added ModelFamily
 
 // XaiKeyUsage is removed, tokenUsage from base Key interface will be used.
-export interface OpenrouterKey extends Key {
-  readonly service: "openrouter";
-  readonly modelFamilies: OpenrouterModelFamily[];
+export interface OpenrouteraiKey extends Key {
+  readonly service: "openrouterai";
+  readonly modelFamilies: OpenrouteraiModelFamily[];
   isOverQuota: boolean;
 }
 
-export class OpenrouterKeyProvider implements KeyProvider<OpenrouterKey> {
-  readonly service = "openrouter";
+export class OpenrouteraiKeyProvider implements KeyProvider<OpenrouterKey> {
+  readonly service = "openrouterai";
 
-  private keys: OpenrouterKey[] = [];
-  private checker?: OpenrouterKeyKeyChecker;
+  private keys: OpenrouteraiKey[] = [];
+  private checker?: OpenrouteraiKeyChecker;
   private log = logger.child({ module: "key-provider", service: this.service });
 
   constructor() {
-    const keyConfig = config.openrouterKey?.trim();
+    const keyConfig = config.openrouteraiKey?.trim();
     if (!keyConfig) {
       return;
     }
@@ -30,7 +30,7 @@ export class OpenrouterKeyProvider implements KeyProvider<OpenrouterKey> {
       this.keys.push({
         key,
         service: this.service,
-        modelFamilies: ["openrouterKey"],
+        modelFamilies: ["openrouteraiKey"],
         isDisabled: false,
         isRevoked: false,
         promptCount: 0,
@@ -57,13 +57,13 @@ export class OpenrouterKeyProvider implements KeyProvider<OpenrouterKey> {
       );
       return;
     }
-    this.checker = new OpenrouterKeyKeyChecker(this.update.bind(this));
+    this.checker = new OpenrouteraiKeyChecker(this.update.bind(this));
     for (const key of this.keys) {
       void this.checker.checkKey(key);
     }
   }
 
-  public get(model: string): OpenrouterKeyKey {
+  public get(model: string): OpenrouteraiKey {
     const availableKeys = this.keys.filter((k) => !k.isDisabled);
     if (availableKeys.length === 0) {
       throw new Error("No OpenrouterKey keys available");
@@ -74,18 +74,18 @@ export class OpenrouterKeyProvider implements KeyProvider<OpenrouterKey> {
     return { ...key };
   }
 
-  public list(): Omit<OpenrouterKeyKey, "key">[] {
+  public list(): Omit<OpenrouteraiKey, "key">[] {
     return this.keys.map(({ key, ...rest }) => rest);
   }
 
-  public disable(key: OpenrouterKeyKey): void {
+  public disable(key: OpenrouteraiKey): void {
     const found = this.keys.find((k) => k.hash === key.hash);
     if (found) {
       found.isDisabled = true;
     }
   }
 
-  public update(hash: string, update: Partial<OpenrouterKeyKey>): void {
+  public update(hash: string, update: Partial<OpenrouteraiKey>): void {
     const key = this.keys.find((k) => k.hash === hash);
     if (key) {
       Object.assign(key, update);
@@ -96,7 +96,7 @@ export class OpenrouterKeyProvider implements KeyProvider<OpenrouterKey> {
     return this.keys.filter((k) => !k.isDisabled).length;
   }
 
-  public incrementUsage(keyHash: string, modelFamily: OpenrouterKeyModelFamily, usage: { input: number; output: number }) {
+  public incrementUsage(keyHash: string, modelFamily: OpenrouteraiKeyModelFamily, usage: { input: number; output: number }) {
     const key = this.keys.find((k) => k.hash === keyHash);
     if (!key) return;
 
@@ -134,7 +134,7 @@ export class OpenrouterKeyProvider implements KeyProvider<OpenrouterKey> {
     const key = this.keys.find((k) => k.hash === keyHash)!;
     const now = Date.now();
     key.rateLimitedAt = now;
-    key.rateLimitedUntil = now + OpenrouterKeyKeyProvider.RATE_LIMIT_LOCKOUT;
+    key.rateLimitedUntil = now + OpenrouteraiKeyProvider.RATE_LIMIT_LOCKOUT;
   }
 
   public recheck(): void {
@@ -159,7 +159,7 @@ export class OpenrouterKeyProvider implements KeyProvider<OpenrouterKey> {
     const key = this.keys.find((k) => k.hash === hash)!;
 
     const currentRateLimit = key.rateLimitedUntil;
-    const nextRateLimit = now + OpenrouterKeyKeyProvider.KEY_REUSE_DELAY;
+    const nextRateLimit = now + OpenrouteraiKeyProvider.KEY_REUSE_DELAY;
 
     key.rateLimitedAt = now;
     key.rateLimitedUntil = Math.max(currentRateLimit, nextRateLimit);

@@ -1,17 +1,17 @@
-import { OpenrouterKeyKey } from "./provider";
+import { OpenrouteraiKey } from "./provider";
 import { logger } from "../../../logger";
 import { assertNever } from "../../utils";
 
 const CHECK_TIMEOUT = 10000;
 
-export class OpenrouterKeyKeyChecker {
-  private log = logger.child({ module: "key-checker", service: "openrouterKey" });
+export class OpenrouteraiKeyChecker {
+  private log = logger.child({ module: "key-checker", service: "openrouteraiKey" });
 
-  constructor(private readonly update: (hash: string, key: Partial<OpenrouterKeyKey>) => void) {
-    this.log.info("OpenrouterKeyKeyChecker initialized");
+  constructor(private readonly update: (hash: string, key: Partial<OpenrouteraiKey>) => void) {
+    this.log.info("OpenrouteraiKeyChecker initialized");
   }
 
-  public async checkKey(key: OpenrouterKeyKey): Promise<void> {
+  public async checkKey(key: OpenrouteraiKey): Promise<void> {
     this.log.info({ hash: key.hash }, "Starting key validation check");
     try {
       const result = await this.validateKey(key);
@@ -31,7 +31,7 @@ export class OpenrouterKeyKeyChecker {
     }
   }
 
-  private async validateKey(key: OpenrouterKeyKey): Promise<"valid" | "invalid" | "quota"> {
+  private async validateKey(key: OpenrouteraiKey): Promise<"valid" | "invalid" | "quota"> {
     const controller = new AbortController();
     const timeout = setTimeout(() => {
       controller.abort();
@@ -104,7 +104,7 @@ export class OpenrouterKeyKeyChecker {
   }
 
   private handleCheckResult(
-    key: OpenrouterKeyKey,
+    key: OpenrouteraiKey,
     result: "valid" | "invalid" | "quota"
   ): void {
     switch (result) {

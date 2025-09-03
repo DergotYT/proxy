@@ -12,7 +12,7 @@ import { openai } from "./openai";
 import { openaiImage } from "./openai-image";
 import { deepseek } from "./deepseek";
 import { xai } from "./xai";
-import { openrouter } from "./openrouter";
+import { openrouterai } from "./openrouterai";
 import { cohere } from "./cohere";
 import { qwen } from "./qwen";
 import { moonshot } from "./moonshot";
@@ -108,10 +108,10 @@ proxyRouter.use("/xai", addV1, (req, res, next) => {
   next();
 }, xai);
 
-proxyRouter.use("/openrouter", addV1, (req, res, next) => {
+proxyRouter.use("/openrouterai", addV1, (req, res, next) => {
   req.log?.info("Routing to OpenRouter endpoint");
   next();
-}, openrouter);
+}, openrouterai);
 
 proxyRouter.use("/cohere", addV1, (req, res, next) => {
   req.log?.info("Routing to Cohere endpoint");

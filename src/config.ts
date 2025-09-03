@@ -50,7 +50,7 @@ type Config = {
    * Comma-delimited list of Xai (Grok) API keys.
    */
   xaiKey?: string;
-  openrouterKey?: string;
+  openrouteraiKey?: string;
   /**
    * Comma-delimited list of Cohere API keys.
    */
@@ -508,7 +508,7 @@ export const config: Config = {
   mistralAIKey: getEnvWithDefault("MISTRAL_AI_KEY", ""),
   deepseekKey: getEnvWithDefault("DEEPSEEK_KEY", ""),
   xaiKey: getEnvWithDefault("XAI_KEY", ""),
-  openrouterKey: getEnvWithDefault("OPENROUTER_AI_KEY", ""),
+  openrouteraiKey: getEnvWithDefault("OPENROUTER_AI_KEY", ""),
   cohereKey: getEnvWithDefault("COHERE_KEY", ""),
   moonshotKey: getEnvWithDefault("MOONSHOT_KEY", ""),
   awsCredentials: getEnvWithDefault("AWS_CREDENTIALS", ""),
@@ -639,7 +639,7 @@ function generateSigningKey() {
     config.mistralAIKey,
     config.deepseekKey,
     config.xaiKey,
-    config.openrouterKey,
+    config.openrouteraiKey,
     config.awsCredentials,
     config.gcpCredentials,
     config.azureCredentials,
@@ -815,7 +815,7 @@ export const OMITTED_KEYS = [
   "googleAIKey",
   "deepseekKey",
   "xaiKey",
-  "openrouterKey",
+  "openrouteraiKey",
   "cohereKey",
   "qwenKey",
   "moonshotKey",

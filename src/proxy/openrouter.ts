@@ -5,13 +5,13 @@ import { createQueuedProxyMiddleware } from "./middleware/request/proxy-middlewa
 import { addKey, finalizeBody } from "./middleware/request";
 import { ProxyResHandlerWithBody } from "./middleware/response";
 import axios from "axios";
-import { OpenrouterKey, keyPool } from "../shared/key-management";
-import { isOpenrouterVisionModel, isOpenrouterImageGenModel, isOpenrouterReasoningModel, isOpenrouterReasoningEffortModel, isOpenrouterReasoningContentModel } from "../shared/api-schemas/Openrouter";
+import { OpenrouteraiKey, keyPool } from "../shared/key-management";
+import { isOpenrouteraiVisionModel, isOpenrouteraiImageGenModel, isOpenrouteraiReasoningModel, isOpenrouteraiReasoningEffortModel, isOpenrouteraiReasoningContentModel } from "../shared/api-schemas/Openrouterai";
 
 let modelsCache: any = null;
 let modelsCacheTime = 0;
 
-const openrouterResponseHandler: ProxyResHandlerWithBody = async (
+const openrouteraiResponseHandler: ProxyResHandlerWithBody = async (
   _proxyRes,
   req,
   res,
@@ -103,7 +103,7 @@ const getModelsResponse = async () => {
     console.log("Fetching fresh models data from OpenRouter API");
     
     const modelToUse = "deepseek/deepseek-chat-v3.1:free";
-    const openrouterKey = keyPool.get(modelToUse, "openrouter") as OpenrouterKey;
+    const openrouteraiKey = keyPool.get(modelToUse, "openrouterai") as OpenrouteraiKey;
     
     if (!openrouterKey || !openrouterKey.key) {
       console.error("Failed to get valid OpenRouter key");
@@ -114,7 +114,7 @@ const getModelsResponse = async () => {
     const response = await axios.get("https://openrouter.ai/api/v1/models", {
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${openrouterKey.key}`
+        "Authorization": `Bearer ${openrouteraiKey.key}`
       },
     });
 
@@ -126,7 +126,7 @@ const getModelsResponse = async () => {
         data: response.data.data.map((model: any) => ({
           id: model.id,
           object: "model",
-          owned_by: "openrouter",
+          owned_by: "openrouterai",
         })),
       };
       console.log(`Cached ${modelsCache.data.length} models`);
@@ -157,18 +157,18 @@ const handleModelRequest: RequestHandler = async (req, res) => {
   }
 };
 
-const openrouterProxy = createQueuedProxyMiddleware({
+const openrouteraiProxy = createQueuedProxyMiddleware({
   mutations: [addKey, finalizeBody],
   target: "https://openrouter.ai",
-  blockingResponseHandler: openrouterResponseHandler,
+  blockingResponseHandler: openrouteraiResponseHandler,
 });
 
-const openrouterRouter = Router();
+const openrouteraiRouter = Router();
 
 function enablePrefill(req: Request) {
   req.log.debug("Checking prefill enablement");
   
-  if (process.env.NO_OPENROUTER_PREFILL) {
+  if (process.env.NO_OPENROUTERAI_PREFILL) {
     req.log.debug("Prefill disabled by environment variable");
     return;
   }
@@ -305,9 +305,9 @@ const handleImageGenerationRequest: RequestHandler = async (req, res) => {
     const modelToUse = req.body.model || "google/gemini-2.5-flash-image-preview";
     req.log.debug(`Using model: ${modelToUse}`);
     
-    const openrouterKey = keyPool.get(modelToUse, "openrouter") as OpenrouterKey;
+    const openrouteraiKey = keyPool.get(modelToUse, "openrouterai") as OpenrouteraiKey;
     
-    if (!openrouterKey || !openrouterKey.key) {
+    if (!openrouteraiKey || !openrouteraiKey.key) {
       req.log.error("Failed to get valid OpenRouter key for image generation");
       throw new Error("Failed to get valid openrouter key for image generation");
     }
@@ -316,7 +316,7 @@ const handleImageGenerationRequest: RequestHandler = async (req, res) => {
     const response = await axios.post("https://openrouter.ai/api/v1/chat/completions", req.body, {
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${openrouterKey.key}`
+        "Authorization": `Bearer ${openrouteraiKey.key}`
       },
     });
     
@@ -333,7 +333,7 @@ const handleImageGenerationRequest: RequestHandler = async (req, res) => {
   }
 };
 
-function countOpenrouterTokens(req: Request) {
+function countOpenrouteraiTokens(req: Request) {
   req.log.debug("Counting OpenRouter tokens");
   const model = req.body.model;
   
@@ -365,27 +365,27 @@ function countOpenrouterTokens(req: Request) {
   }
 }
 
-openrouterRouter.post(
+openrouteraiRouter.post(
   "/v1/chat/completions",
   ipLimiter,
   createPreprocessorMiddleware(
-    { inApi: "openai", outApi: "openai", service: "openrouter" },
-    { afterTransform: [ redirectImageRequests, enablePrefill, removeUnsupportedParameters, countOpenrouterTokens ] }
+    { inApi: "openai", outApi: "openai", service: "openrouterai" },
+    { afterTransform: [ redirectImageRequests, enablePrefill, removeUnsupportedParameters, countOpenrouteraiTokens ] }
   ),
-  openrouterProxy
+  openrouteraiProxy
 );
 
-openrouterRouter.post(
+openrouteraiRouter.post(
   "/v1/images/generations",
   ipLimiter,
   handleImageGenerationRequest
 );
 
-openrouterRouter.get("/v1/models", handleModelRequest);
+openrouteraiRouter.get("/v1/models", handleModelRequest);
 
 console.log("OpenRouter router configured with endpoints:");
 console.log("  POST /v1/chat/completions");
 console.log("  POST /v1/images/generations");
 console.log("  GET /v1/models");
 
-export const openrouter = openrouterRouter;
+export const openrouterai = openrouteraiRouter;

@@ -253,8 +253,8 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
         case "xai":
           await handleXaiBadRequestError(req, errorPayload);
           break;
-      case "openrouter":
-        await handleOpenrouterBadRequestError(req, errorPayload);
+      case "openrouterai":
+        await handleOpenrouteraiBadRequestError(req, errorPayload);
         break;
       case "anthropic":
       case "aws":
@@ -288,7 +288,7 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
       await reenqueueRequest(req);
       throw new RetryableError("Deepseek key has insufficient balance, retrying with different key.");
     },
-    if (service === "openrouter") {
+    if (service === "openrouterai") {
       keyPool.disable(req.key!, "quota");
       await reenqueueRequest(req);
       throw new RetryableError("Openrouter key has insufficient balance, retrying with different key.");
@@ -378,8 +378,8 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
         case "xai":
           await handleXaiRateLimitError(req, errorPayload);
           break;
-        case "openrouter":
-          await handleOpenrouterRateLimitError(req, errorPayload);
+        case "openrouterai":
+          await handleOpenrouteraiRateLimitError(req, errorPayload);
           break;	
         case "cohere":
           await handleCohereRateLimitError(req, errorPayload);
@@ -416,7 +416,7 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
       case "azure":
       case "deepseek":
       case "xai":
-      case "openrouter":
+      case "openrouterai":
       case "cohere":
       case "qwen":
         errorPayload.proxy_note = `The key assigned to your prompt does not support the requested model.`;
@@ -584,7 +584,7 @@ async function handleXaiRateLimitError(
   await reenqueueRequest(req);
   throw new RetryableError("Xai rate-limited request re-enqueued.");
 }
-async function handleOpenrouterRateLimitError(
+async function handleOpenrouteraiRateLimitError(
   req: Request,
   errorPayload: ProxiedErrorPayload
 ) {
@@ -600,7 +600,7 @@ async function handleXaiBadRequestError(
   // Based on the checker code, a 400 response means the key is valid but there was some other error
   errorPayload.proxy_note = `The API rejected the request. Check the error message for details.`;
 }
-async function handleOpenrouterBadRequestError(
+async function handleOpenrouteraiBadRequestError(
   req: Request, 
   errorPayload: ProxiedErrorPayload
 ) {
