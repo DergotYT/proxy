@@ -4,20 +4,6 @@ import { assertNever } from "../../utils";
 
 const CHECK_TIMEOUT = 10000;
 
-interface OpenRouterKeyInfo {
-  key: string;
-  free_tier: 'free' | 'paid';
-  is_provisioning: boolean;
-  limit_remaining: string;
-  limit: string;
-  label: string;
-  total_credits: string;
-  total_usage: string;
-  provisioning_keys?: any[];
-  provisioning_parent?: string;
-  error?: string;
-}
-
 export class OpenrouterKeyChecker {
   private log = logger.child({ module: "key-checker", service: "openrouter" });
 
@@ -53,28 +39,56 @@ export class OpenrouterKeyChecker {
     }, CHECK_TIMEOUT);
 
     try {
-      // Получаем информацию о ключе
-      const keyInfo = await this.getKeyInfo(key.key, controller);
-      
-      if (keyInfo.error) {
+      // Проверка ключа через OpenRouter API
+      const keyInfoResponse = await fetch("https://openrouter.ai/api/v1/key", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${key.key}`,
+        },
+        signal: controller.signal,
+      });
+
+      if (keyInfoResponse.status !== 200) {
         return "invalid";
       }
 
-      // Проверяем баланс и лимиты
-      if (keyInfo.free_tier === 'free') {
-        const usage = parseInt(keyInfo.limit_remaining.split(' ')[0]);
-        if (usage <= 0) {
-          return "quota";
-        }
+      // Проверка возможности использования модели anthropic/claude-sonnet-4
+      const testResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${key.key}`,
+        },
+        body: JSON.stringify({
+          model: "anthropic/claude-sonnet-4",
+          messages: [
+            {
+              role: "user",
+              content: "Hello"
+            }
+          ],
+          max_tokens: 10
+        }),
+        signal: controller.signal,
+      });
+
+      if (testResponse.status === 200 || testResponse.status === 400) {
+        return "valid";
+      } else if (testResponse.status === 429) {
+        return "quota";
+      } else if (testResponse.status === 403) {
+        this.log.warn(
+          { status: testResponse.status, hash: key.hash },
+          "Forbidden (403) response, key is invalid"
+        );
+        return "invalid";
       } else {
-        const balance = parseFloat(keyInfo.limit_remaining.replace('$', ''));
-        if (balance <= 0) {
-          return "quota";
-        }
+        this.log.warn(
+          { status: testResponse.status, hash: key.hash },
+          "Unexpected status code while testing key usage"
+        );
+        return "invalid";
       }
-
-      return "valid";
-
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         this.log.warn({ hash: key.hash }, "Key validation aborted");
@@ -83,79 +97,6 @@ export class OpenrouterKeyChecker {
     } finally {
       clearTimeout(timeout);
     }
-  }
-
-  private async getKeyInfo(apiKey: string, controller: AbortController): Promise<OpenRouterKeyInfo> {
-    // Запрос информации о ключе
-    const keyResponse = await fetch('https://openrouter.ai/api/v1/key', {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`
-      },
-      signal: controller.signal
-    });
-
-    if (!keyResponse.ok) {
-      return {
-        key: apiKey,
-        free_tier: 'paid',
-        is_provisioning: false,
-        limit_remaining: '0',
-        limit: '0',
-        label: '',
-        total_credits: '0',
-        total_usage: '0',
-        error: `HTTP ${keyResponse.status}`
-      };
-    }
-
-    const keyData = await keyResponse.json();
-    const data = keyData.data || {};
-
-    // Запрос информации о кредитах
-    const creditsResponse = await fetch('https://openrouter.ai/api/v1/credits', {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`
-      },
-      signal: controller.signal
-    });
-
-    let creditsData = { data: {} };
-    if (creditsResponse.ok) {
-      creditsData = await creditsResponse.json();
-    }
-
-    const credits = creditsData.data || {};
-
-    // Обработка информации о балансе
-    const free_tier = data.is_free_tier ? 'free' : 'paid';
-    let limit_remaining = '0';
-    let limit = '0';
-
-    if (free_tier === 'free') {
-      const usage = data.usage || 0;
-      const free_requests_remaining = Math.max(0, 10 - usage);
-      limit_remaining = `${free_requests_remaining} free requests`;
-      limit = '10 free requests';
-    } else {
-      limit_remaining = data.limit_remaining !== undefined ? 
-        `${data.limit_remaining}$` : 'нет лимита';
-      limit = data.limit !== undefined ? `${data.limit}$` : 'нет лимита';
-    }
-
-    return {
-      key: apiKey,
-      free_tier,
-      is_provisioning: data.is_provisioning_key || false,
-      limit_remaining,
-      limit,
-      label: data.label || 'N/A',
-      total_credits: credits.total_credits !== undefined ? 
-        `${credits.total_credits}$` : 'N/A',
-      total_usage: credits.total_usage !== undefined ? 
-        `${credits.total_usage}$` : 'N/A'
-    };
   }
 
   private handleCheckResult(
