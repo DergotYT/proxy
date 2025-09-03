@@ -253,6 +253,9 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
         case "xai":
           await handleXaiBadRequestError(req, errorPayload);
           break;
+      case "openrouter":
+        await handleOpenrouterBadRequestError(req, errorPayload);
+        break;
       case "anthropic":
       case "aws":
       case "gcp":
@@ -284,6 +287,11 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
       keyPool.disable(req.key!, "quota");
       await reenqueueRequest(req);
       throw new RetryableError("Deepseek key has insufficient balance, retrying with different key.");
+    },
+    if (service === "openrouter") {
+      keyPool.disable(req.key!, "quota");
+      await reenqueueRequest(req);
+      throw new RetryableError("Openrouter key has insufficient balance, retrying with different key.");
     }
   } else if (statusCode === 405) {
     // Xai specific - insufficient balance
@@ -370,6 +378,9 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
         case "xai":
           await handleXaiRateLimitError(req, errorPayload);
           break;
+        case "openrouter":
+          await handleOpenrouterRateLimitError(req, errorPayload);
+          break;	
         case "cohere":
           await handleCohereRateLimitError(req, errorPayload);
           break;
@@ -405,6 +416,7 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
       case "azure":
       case "deepseek":
       case "xai":
+      case "openrouter":
       case "cohere":
       case "qwen":
         errorPayload.proxy_note = `The key assigned to your prompt does not support the requested model.`;
@@ -572,8 +584,23 @@ async function handleXaiRateLimitError(
   await reenqueueRequest(req);
   throw new RetryableError("Xai rate-limited request re-enqueued.");
 }
+async function handleOpenrouterRateLimitError(
+  req: Request,
+  errorPayload: ProxiedErrorPayload
+) {
+  keyPool.markRateLimited(req.key!);
+  await reenqueueRequest(req);
+  throw new RetryableError("Openrouter rate-limited request re-enqueued.");
+}
 
 async function handleXaiBadRequestError(
+  req: Request, 
+  errorPayload: ProxiedErrorPayload
+) {
+  // Based on the checker code, a 400 response means the key is valid but there was some other error
+  errorPayload.proxy_note = `The API rejected the request. Check the error message for details.`;
+}
+async function handleOpenrouterBadRequestError(
   req: Request, 
   errorPayload: ProxiedErrorPayload
 ) {

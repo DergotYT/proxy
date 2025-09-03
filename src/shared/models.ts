@@ -17,6 +17,7 @@ export type LLMService =
   | "azure"
   | "deepseek"
   | "xai"
+  | "openrouter"
   | "cohere"
   | "qwen"
   | "moonshot";
@@ -61,6 +62,7 @@ export type GcpModelFamily = "gcp-claude" | "gcp-claude-opus";
 export type AzureOpenAIModelFamily = `azure-${OpenAIModelFamily}`;
 export type DeepseekModelFamily = "deepseek";
 export type XaiModelFamily = "xai";
+export type OpenrouterModelFamily = "openrouter";
 export type CohereModelFamily = "cohere";
 export type QwenModelFamily = "qwen";
 export type MoonshotModelFamily = "moonshot";
@@ -75,6 +77,7 @@ export type ModelFamily =
   | AzureOpenAIModelFamily
   | DeepseekModelFamily
   | XaiModelFamily
+  | OpenrouterModelFamily
   | CohereModelFamily
   | QwenModelFamily
   | MoonshotModelFamily;
@@ -86,6 +89,7 @@ export const MODEL_FAMILIES = (<A extends readonly ModelFamily[]>(
   "qwen",
   "cohere",
   "xai",
+  "openrouter",
   "deepseek",
   "turbo",
   "gpt4",
@@ -164,6 +168,7 @@ export const LLM_SERVICES = (<A extends readonly LLMService[]>(
   "azure",
   "deepseek",
   "xai",
+  "openrouter",
   "cohere",
   "qwen",
   "moonshot"
@@ -176,6 +181,7 @@ export const MODEL_FAMILY_SERVICE: {
   qwen: "qwen",
   cohere: "cohere",
   xai: "xai",
+  openrouter: "openrouter",
   deepseek: "deepseek",
   turbo: "openai",
   gpt4: "openai",
@@ -436,6 +442,8 @@ export function getModelFamilyForRequest(req: Request): ModelFamily {
           modelFamily = "deepseek";
         } else if (req.service === "xai") {
           modelFamily = "xai";
+        } else if (req.service === "openrouter") {
+          modelFamily = "openrouter";
         } else if (req.service === "moonshot") {
           modelFamily = "moonshot";
         } else {

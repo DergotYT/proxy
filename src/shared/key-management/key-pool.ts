@@ -15,6 +15,7 @@ import { AzureOpenAIKeyProvider } from "./azure/provider";
 import { MistralAIKeyProvider } from "./mistral-ai/provider";
 import { DeepseekKeyProvider } from "./deepseek/provider";
 import { XaiKeyProvider } from "./xai/provider";
+import { OpenrouterKeyProvider } from "./openrouter/provider";
 import { CohereKeyProvider } from "./cohere/provider";
 import { QwenKeyProvider } from "./qwen/provider";
 import { MoonshotKeyProvider } from "./moonshot/provider";
@@ -37,6 +38,7 @@ export class KeyPool {
     this.keyProviders.push(new AzureOpenAIKeyProvider());
     this.keyProviders.push(new DeepseekKeyProvider());
     this.keyProviders.push(new XaiKeyProvider());
+    this.keyProviders.push(new OpenrouterKeyProvider());
     this.keyProviders.push(new CohereKeyProvider());
     this.keyProviders.push(new QwenKeyProvider());
     this.keyProviders.push(new MoonshotKeyProvider());
@@ -82,6 +84,7 @@ export class KeyPool {
       service instanceof AnthropicKeyProvider ||
       service instanceof DeepseekKeyProvider ||
       service instanceof XaiKeyProvider ||
+      service instanceof OpenrouterKeyProvider ||
       service instanceof CohereKeyProvider ||
       service instanceof QwenKeyProvider ||
       service instanceof MoonshotKeyProvider
@@ -210,6 +213,8 @@ export class KeyPool {
       return "mistral-ai";
     } else if (model.includes("xai")) {
       return "xai";
+    } else if (model.includes("openrouter")) {
+      return "openrouter";
     } else if (model.includes("command") || model.includes("cohere")) {
       return "cohere";
     } else if (model.includes("qwen")) {
