@@ -5,6 +5,7 @@ import { ModelFamily } from "./models";
 const MODEL_PRICING: Record<ModelFamily, { input: number; output: number } | undefined> = {
   "deepseek": { input: 0.55, output: 2.19 }, // DeepSeek Reasoner (standard price, input cache miss)
   "xai": { input: 5.6, output: 16.8 }, // Grok: Derived from avg $14/1M (assuming 1:3 in/out ratio) - needs official pricing
+  "openrouter": { input: 5.6, output: 16.8 }, // Grok: Derived from avg $14/1M (assuming 1:3 in/out ratio) - needs official pricing
   "gpt41": { input: 2.00, output: 8.00 },
   "azure-gpt41": { input: 2.00, output: 8.00 },
   "gpt41-mini": { input: 0.40, output: 1.60 },

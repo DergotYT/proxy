@@ -32,21 +32,21 @@ export type ImageUrlContent = z.infer<typeof ImageUrlContentSchema>;
 export type ContentItem = z.infer<typeof ContentItemSchema>;
 
 // Helper function to check if a model supports vision
-export function isGrokVisionModel(model: string): boolean {
+export function isOpenrouterVisionModel(model: string): boolean {
   // Check if the model name contains '-vision' anywhere in the name
   // This makes it future-proof for new vision models
   return model.toLowerCase().includes("-vision");
 }
 
 // Helper function to check if a model supports image generation
-export function isGrokImageGenModel(model: string): boolean {
+export function isOpenrouterImageGenModel(model: string): boolean {
   // Check if the model name contains '-image' anywhere in the name
   // This makes it future-proof for new image generation models
   return model.toLowerCase().includes("-image");
 }
 
 // Helper function to check if a model supports reasoning
-export function isGrokReasoningModel(model: string): boolean {
+export function isOpenrouterReasoningModel(model: string): boolean {
   // grok-3-mini variants and grok-4-0709 support reasoning
   const modelLower = model.toLowerCase();
   return (modelLower.includes("-mini") && modelLower.includes("grok-3")) || 
@@ -54,7 +54,7 @@ export function isGrokReasoningModel(model: string): boolean {
 }
 
 // Helper function to check if a model supports reasoning_effort parameter
-export function isGrokReasoningEffortModel(model: string): boolean {
+export function isOpenrouterReasoningEffortModel(model: string): boolean {
   // Only grok-3-mini variants support reasoning_effort parameter
   // grok-4-0709 does NOT support reasoning_effort
   const modelLower = model.toLowerCase();
@@ -62,7 +62,7 @@ export function isGrokReasoningEffortModel(model: string): boolean {
 }
 
 // Helper function to check if a model returns reasoning_content
-export function isGrokReasoningContentModel(model: string): boolean {
+export function isOpenrouterReasoningContentModel(model: string): boolean {
   // Only grok-3-mini variants return reasoning_content
   // grok-4-0709 does NOT return reasoning_content
   const modelLower = model.toLowerCase();

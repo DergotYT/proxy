@@ -101,6 +101,9 @@ export const addKey: ProxyReqMutator = (manager) => {
     case "xai":
       manager.setHeader("Authorization", `Bearer ${assignedKey.key}`);
       break;
+	  case "openrouter":
+      manager.setHeader("Authorization", `Bearer ${assignedKey.key}`);
+      break;
     case "cohere":
       manager.setHeader("Authorization", `Bearer ${assignedKey.key}`);
       break;
