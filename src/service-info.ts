@@ -3,11 +3,11 @@ import {
   AnthropicKey,
   AwsBedrockKey,
   DeepseekKey,
+  OpenrouterKey,
   GcpKey,
   keyPool,
   OpenAIKey,
   XaiKey,
-  OpenrouteraiKey,
   CohereKey,
   QwenKey,
   MoonshotKey,
@@ -26,8 +26,8 @@ import {
   ModelFamily,
   OpenAIModelFamily,
   DeepseekModelFamily,
+  OpenrouterModelFamily,
   XaiModelFamily,
-  OpenrouteraiModelFamily,
   CohereModelFamily,
   QwenModelFamily,
   MoonshotModelFamily,
@@ -114,8 +114,8 @@ const MODEL_FAMILY_ORDER: ModelFamily[] = [
   "gcp-claude-opus",
   // Other services
   "deepseek",
+  "openrouter",
   "xai",
-  "openrouterai",
   "cohere",
   "qwen",
   "moonshot"
@@ -130,10 +130,10 @@ const keyIsAwsKey = (k: KeyPoolKey): k is AwsBedrockKey => k.service === "aws";
 const keyIsGcpKey = (k: KeyPoolKey): k is GcpKey => k.service === "gcp";
 const keyIsDeepseekKey = (k: KeyPoolKey): k is DeepseekKey =>
   k.service === "deepseek";
+const keyIsOpenrouterKey = (k: KeyPoolKey): k is OpenrouterKey =>
+  k.service === "openrouter";
 const keyIsXaiKey = (k: KeyPoolKey): k is XaiKey =>
   k.service === "xai";
-  const keyIsOpenrouteraiKey = (k: KeyPoolKey): k is OpenrouteraiKey =>
-  k.service === "openrouterai";
 const keyIsCohereKey = (k: KeyPoolKey): k is CohereKey =>
   k.service === "cohere";
 const keyIsQwenKey = (k: KeyPoolKey): k is QwenKey =>
@@ -211,8 +211,8 @@ export type ServiceInfo = {
   endpoints: {
     openai?: string;
     deepseek?: string;
+    openrouter?: string;
     xai?: string;
-    openrouterai?: string;
     anthropic?: string;
     "google-ai"?: string;
     "mistral-ai"?: string;
@@ -236,8 +236,8 @@ export type ServiceInfo = {
   & { [f in GoogleAIModelFamily]?: BaseFamilyInfo & { overQuotaKeys?: number } }
   & { [f in MistralAIModelFamily]?: BaseFamilyInfo }
   & { [f in DeepseekModelFamily]?: BaseFamilyInfo }
+  & { [f in OpenrouterModelFamily]?: BaseFamilyInfo }
   & { [f in XaiModelFamily]?: BaseFamilyInfo }
-  & { [f in OpenrouteraiModelFamily]?: BaseFamilyInfo }
   & { [f in CohereModelFamily]?: BaseFamilyInfo }
   & { [f in QwenModelFamily]?: BaseFamilyInfo }
   & { [f in MoonshotModelFamily]?: BaseFamilyInfo };
@@ -285,11 +285,11 @@ const SERVICE_ENDPOINTS: { [s in LLMService]: Record<string, string> } = {
   deepseek: {
     deepseek: `%BASE%/deepseek`,
   },
+  openrouter: {
+    openrouter: `%BASE%/openrouter`,
+  },
   xai: {
     xai: `%BASE%/xai`,
-  },
-  openrouterai: {
-    openrouterai: `%BASE%/openrouterai`,
   },
   cohere: {
     cohere: `%BASE%/cohere`,
@@ -456,8 +456,8 @@ function addKeyToAggregates(k: KeyPoolKey) {
   addToService("gcp__keys", k.service === "gcp" ? 1 : 0);
   addToService("azure__keys", k.service === "azure" ? 1 : 0);
   addToService("deepseek__keys", k.service === "deepseek" ? 1 : 0);
+  addToService("openrouter__keys", k.service === "openrouter" ? 1 : 0);
   addToService("xai__keys", k.service === "xai" ? 1 : 0);
-  addToService("openrouterai__keys", k.service === "openrouterai" ? 1 : 0);
   addToService("cohere__keys", k.service === "cohere" ? 1 : 0);
   addToService("qwen__keys", k.service === "qwen" ? 1 : 0);
   addToService("moonshot__keys", k.service === "moonshot" ? 1 : 0);
@@ -567,16 +567,24 @@ function addKeyToAggregates(k: KeyPoolKey) {
         addToFamily(`${f}__overQuota`, k.isOverQuota ? 1 : 0);
       });
       break;
+    case "openrouter":
+	  if (!keyIsOpenrouterKey(k)) throw new Error("Invalid key type");
+	  k.modelFamilies.forEach((f) => {
+      incrementGenericFamilyStats(f);
+      addToFamily(`${f}__overQuota`, k.isOverQuota ? 1 : 0);
+    // Добавляем информацию о балансе
+      if (k.isFreeTier) {
+		addToFamily(`${f}__freeBalance`, k.balance || 0);
+	  } else {
+		addToFamily(`${f}__billingBalance`, k.balance || 0);
+			}
+		});
+		break;
+
+      });
+      break;
     case "xai":
       if (!keyIsXaiKey(k)) throw new Error("Invalid key type");
-      k.modelFamilies.forEach((f) => {
-        incrementGenericFamilyStats(f);
-        if ('isOverQuota' in k) {
-          addToFamily(`${f}__overQuota`, k.isOverQuota ? 1 : 0);
-        }
-      });
-    case "openrouterai":
-      if (!keyIsOpenrouteraiKey(k)) throw new Error("Invalid key type");
       k.modelFamilies.forEach((f) => {
         incrementGenericFamilyStats(f);
         if ('isOverQuota' in k) {
@@ -744,10 +752,19 @@ function getInfoForFamily(family: ModelFamily): BaseFamilyInfo {
       case "deepseek":
         info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
         break;
+      case "openrouter":
+		info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
+		const freeBalance = familyStats.get(`${family}__freeBalance`) || 0;
+		const billingBalance = familyStats.get(`${family}__billingBalance`) || 0;
+  
+		if (freeBalance > 0) {
+			info.usage = `${freeBalance} free requests available`;
+		}
+		if (billingBalance > 0) {
+			info.usage = `$${billingBalance.toFixed(2)} balance available`;
+		}
+		break;
       case "xai":
-        info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
-        break;
-      case "openrouterai":
         info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
         break;
       case "cohere":

@@ -133,6 +133,8 @@ export const validateContextSize: RequestPreprocessor = async (req) => {
     modelMax = 100000;
   } else if (model.match(/^deepseek/)) {
     modelMax = 128000;
+  } else if (model.match(/^openrouter/)) {
+    modelMax = 128000;
   } else if (model.match(/^kimi-k2/)) {
     // Kimi K2 models have 131k context window
     modelMax = 131000;

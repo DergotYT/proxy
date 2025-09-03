@@ -250,12 +250,12 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
       case "deepseek":
         await handleDeepseekBadRequestError(req, errorPayload);
         break;
+      case "openrouter":
+        await handleOpenrouterBadRequestError(req, errorPayload);
+        break;
         case "xai":
           await handleXaiBadRequestError(req, errorPayload);
           break;
-      case "openrouterai":
-        await handleOpenrouteraiBadRequestError(req, errorPayload);
-        break;
       case "anthropic":
       case "aws":
       case "gcp":
@@ -288,7 +288,7 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
       await reenqueueRequest(req);
       throw new RetryableError("Deepseek key has insufficient balance, retrying with different key.");
     }
-    if (service === "openrouterai") {
+	else if (service === "openrouter") {
       keyPool.disable(req.key!, "quota");
       await reenqueueRequest(req);
       throw new RetryableError("Openrouter key has insufficient balance, retrying with different key.");
@@ -375,12 +375,12 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
       case "deepseek":
         await handleDeepseekRateLimitError(req, errorPayload);
         break;
+      case "openrouter":
+        await handleOpenrouterRateLimitError(req, errorPayload);
+        break;
         case "xai":
           await handleXaiRateLimitError(req, errorPayload);
           break;
-        case "openrouterai":
-          await handleOpenrouteraiRateLimitError(req, errorPayload);
-          break;	
         case "cohere":
           await handleCohereRateLimitError(req, errorPayload);
           break;
@@ -415,8 +415,8 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
       case "gcp":
       case "azure":
       case "deepseek":
+      case "openrouter":
       case "xai":
-      case "openrouterai":
       case "cohere":
       case "qwen":
         errorPayload.proxy_note = `The key assigned to your prompt does not support the requested model.`;
@@ -567,8 +567,23 @@ async function handleDeepseekRateLimitError(
   await reenqueueRequest(req);
   throw new RetryableError("Deepseek rate-limited request re-enqueued.");
 }
+async function handleOpenrouterRateLimitError(
+  req: Request,
+  errorPayload: ProxiedErrorPayload
+) {
+  keyPool.markRateLimited(req.key!);
+  await reenqueueRequest(req);
+  throw new RetryableError("Openrouter rate-limited request re-enqueued.");
+}
 
 async function handleDeepseekBadRequestError(
+  req: Request, 
+  errorPayload: ProxiedErrorPayload
+) {
+  // Based on the checker code, a 400 response means the key is valid but there was some other error
+  errorPayload.proxy_note = `The API rejected the request. Check the error message for details.`;
+}
+async function handleOpenrouterBadRequestError(
   req: Request, 
   errorPayload: ProxiedErrorPayload
 ) {
@@ -584,23 +599,8 @@ async function handleXaiRateLimitError(
   await reenqueueRequest(req);
   throw new RetryableError("Xai rate-limited request re-enqueued.");
 }
-async function handleOpenrouteraiRateLimitError(
-  req: Request,
-  errorPayload: ProxiedErrorPayload
-) {
-  keyPool.markRateLimited(req.key!);
-  await reenqueueRequest(req);
-  throw new RetryableError("Openrouter rate-limited request re-enqueued.");
-}
 
 async function handleXaiBadRequestError(
-  req: Request, 
-  errorPayload: ProxiedErrorPayload
-) {
-  // Based on the checker code, a 400 response means the key is valid but there was some other error
-  errorPayload.proxy_note = `The API rejected the request. Check the error message for details.`;
-}
-async function handleOpenrouteraiBadRequestError(
   req: Request, 
   errorPayload: ProxiedErrorPayload
 ) {
@@ -972,7 +972,7 @@ const countResponseTokens: ProxyResHandlerWithBody = async (
     const completion = getCompletionFromBody(req, body);
     const tokens = await countTokens({ req, completion, service });
     
-    if (req.service === "openai" || req.service === "azure" || req.service === "deepseek" || req.service === "cohere" || req.service === "qwen") {
+    if (req.service === "openai" || req.service === "azure" || req.service === "deepseek" || req.service === "openrouter" || req.service === "cohere" || req.service === "qwen") {
       // O1 consumes (a significant amount of) invisible tokens for the chain-
       // of-thought reasoning. We have no way to count these other than to check
       // the response body.
