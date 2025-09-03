@@ -44,6 +44,7 @@ export class OpenrouterKeyChecker {
         method: "GET",
         headers: {
           Authorization: `Bearer ${key.key}`,
+          "Accept": "application/json",
         },
         signal: controller.signal,
       });
@@ -52,7 +53,17 @@ export class OpenrouterKeyChecker {
         return "invalid";
       }
 
-      const keyInfo = await keyInfoResponse.json();
+      // Обрабатываем ответ как текст сначала, на случай если это не JSON
+      const keyInfoText = await keyInfoResponse.text();
+      let keyInfo;
+      
+      try {
+        keyInfo = JSON.parse(keyInfoText);
+      } catch (e) {
+        this.log.warn({ hash: key.hash, response: keyInfoText }, "Key info response is not JSON");
+        return "invalid";
+      }
+
       const isFreeTier = keyInfo.data?.is_free_tier;
 
       // Если ключ бесплатный, возвращаем статус "free"
@@ -65,6 +76,7 @@ export class OpenrouterKeyChecker {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Accept": "application/json",
           Authorization: `Bearer ${key.key}`,
         },
         body: JSON.stringify({
@@ -80,6 +92,26 @@ export class OpenrouterKeyChecker {
         signal: controller.signal,
       });
 
+      // Обрабатываем ответ как текст сначала
+      const responseText = await testResponse.text();
+      let responseData;
+      
+      try {
+        responseData = JSON.parse(responseText);
+      } catch (e) {
+        // Если ответ не JSON, но статус 200 или 400, считаем ключ валидным
+        if (testResponse.status === 200 || testResponse.status === 400) {
+          return "valid";
+        } else if (testResponse.status === 429) {
+          return "quota";
+        } else {
+          this.log.warn({ hash: key.hash, status: testResponse.status, response: responseText }, 
+            "Unexpected non-JSON response");
+          return "invalid";
+        }
+      }
+
+      // Если мы получили JSON, обрабатываем как обычно
       if (testResponse.status === 200 || testResponse.status === 400) {
         return "valid";
       } else if (testResponse.status === 429) {
