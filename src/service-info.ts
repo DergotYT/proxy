@@ -567,19 +567,13 @@ function addKeyToAggregates(k: KeyPoolKey) {
         addToFamily(`${f}__overQuota`, k.isOverQuota ? 1 : 0);
       });
       break;
-   case "openrouter":
-		if (!keyIsOpenrouterKey(k)) throw new Error("Invalid key type");
-			k.modelFamilies.forEach((f) => {
-				incrementGenericFamilyStats(f);
-				addToFamily(`${f}__overQuota`, k.isOverQuota ? 1 : 0);
-			// Add balance information
-				if (k.isFreeTier) {
-					addToFamily(`${f}__freeBalance`, k.balance || 0);
-				} else {
-					addToFamily(`${f}__billingBalance`, k.balance || 0);
-				}
-		});
-		break;
+    case "openrouter":
+      if (!keyIsOpenrouterKey(k)) throw new Error("Invalid key type");
+      k.modelFamilies.forEach((f) => {
+        incrementGenericFamilyStats(f);
+        addToFamily(`${f}__overQuota`, k.isOverQuota ? 1 : 0);
+      });
+      break;
     case "xai":
       if (!keyIsXaiKey(k)) throw new Error("Invalid key type");
       k.modelFamilies.forEach((f) => {
@@ -750,17 +744,8 @@ function getInfoForFamily(family: ModelFamily): BaseFamilyInfo {
         info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
         break;
       case "openrouter":
-		info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
-		const freeBalance = familyStats.get(`${family}__freeBalance`) || 0;
-		const billingBalance = familyStats.get(`${family}__billingBalance`) || 0;
-  
-		if (freeBalance > 0) {
-			info.usage = `${freeBalance} free requests available`;
-		}
-		if (billingBalance > 0) {
-			info.usage = `$${billingBalance.toFixed(2)} balance available`;
-		}
-		break;
+        info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
+        break;
       case "xai":
         info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
         break;

@@ -119,78 +119,58 @@ export class OpenrouterKeyChecker {
     const timeout = setTimeout(() => controller.abort(), CHECK_TIMEOUT);
 
     try {
-      // Сначала проверяем платной моделью
-      const paidResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${key.key}`,
         },
         body: JSON.stringify({
-          model: "anthropic/claude-3-opus",
+          model: "anthropic/claude-3.5-sonnet", 
           messages: [{ role: "user", content: "hi" }],
-          max_tokens: 1,
+          max_tokens: 0,
         }),
         signal: controller.signal,
       });
 
-      if (paidResponse.status === 402) {
-        // Если 402, проверяем бесплатной моделью
-        const freeResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${key.key}`,
-          },
-          body: JSON.stringify({
-            model: "deepseek/deepseek-chat-v3.1:free",
-            messages: [{ role: "user", content: "hi" }],
-            max_tokens: 1,
-          }),
-          signal: controller.signal,
-        });
+      const rateLimit = {
+        limit: parseInt(response.headers.get("x-ratelimit-limit") || "200"),
+        remaining: parseInt(response.headers.get("x-ratelimit-remaining") || "199"),
+      };
 
-        if (freeResponse.status === 200) {
-          // Ключ бесплатный
-          this.update(key.hash, { isFreeTier: true, balance: 0 });
+      switch (response.status) {
+        case 400:
+          this.log.debug(
+            { key: key.hash, rateLimit },
+            "Key check successful, updating rate limit info"
+          );
           return "valid";
-        } else {
-          // Ключ с исчерпанным лимитом
+        case 401:
+          this.log.warn({ hash: key.hash }, "Key is invalid (authentication failed)");
+          return "invalid";
+        case 402:
+          this.log.warn({ hash: key.hash }, "Key has insufficient balance");
           return "quota";
-        }
-      } else if (paidResponse.status === 200) {
-        // Ключ платный, получаем баланс
-        const balance = await this.getKeyBalance(key.key);
-        this.update(key.hash, { isFreeTier: false, balance });
-        return "valid";
-      } else if (paidResponse.status === 401) {
-        return "invalid";
-      } else {
-        return "server_error";
+        case 429:
+          this.log.warn({ key: key.hash }, "Key is rate limited");
+          return "valid";
+        case 500:
+          this.log.warn({ hash: key.hash }, "Server error when checking key");
+          return "server_error";
+        case 503:
+          this.log.warn({ hash: key.hash }, "Server overloaded when checking key");
+          return "server_error";
+        default:
+          this.log.warn(
+            { status: response.status, hash: key.hash },
+            "Unexpected status code while checking key"
+          );
+          return "valid";
       }
     } finally {
       clearTimeout(timeout);
     }
   }
-
-  private async getKeyBalance(key: string): Promise<number> {
-    try {
-      const response = await fetch("https://openrouter.ai/api/v1/auth/key", {
-        headers: {
-          Authorization: `Bearer ${key}`,
-        },
-      });
-
-      if (response.status === 200) {
-        const data = await response.json();
-        return data.data?.limit_remaining || 0;
-      }
-    } catch (error) {
-      this.log.warn({ error }, "Failed to get key balance");
-    }
-    return 0;
-  }
-
 
   private handleCheckResult(
     key: OpenrouterKey,

@@ -6,6 +6,7 @@ import { addKey, finalizeBody } from "./middleware/request";
 import { ProxyResHandlerWithBody } from "./middleware/response";
 import axios from "axios";
 import { OpenrouterKey, keyPool } from "../shared/key-management";
+
 let modelsCache: any = null;
 let modelsCacheTime = 0;
 
@@ -20,6 +21,7 @@ const openrouterResponseHandler: ProxyResHandlerWithBody = async (
   }
 
   let newBody = body;
+
   res.status(200).json({ ...newBody, proxy: body.proxy });
 };
 
@@ -80,7 +82,7 @@ const handleModelRequest: RequestHandler = async (_req, res) => {
 
 const openrouterProxy = createQueuedProxyMiddleware({
   mutations: [addKey, finalizeBody],
-  target: "https://openrouter.ai/api",
+  target: "https://openrouter.ai/api/v1",
   blockingResponseHandler: openrouterResponseHandler,
 });
 

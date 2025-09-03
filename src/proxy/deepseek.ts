@@ -108,12 +108,24 @@ function enablePrefill(req: Request) {
   msgs.splice(i + 1, msgs.length, { role: 'assistant', content, prefix: true });
 }
 
+function removeReasonerStuff(req: Request) {
+  if (req.body.model === "deepseek-reasoner") {
+    // https://api-docs.deepseek.com/guides/reasoning_model
+    delete req.body.presence_penalty;
+    delete req.body.frequency_penalty;
+    delete req.body.temperature;
+    delete req.body.top_p;
+    delete req.body.logprobs;
+    delete req.body.top_logprobs;
+  }
+}
+
 deepseekRouter.post(
   "/v1/chat/completions",
   ipLimiter,
   createPreprocessorMiddleware(
     { inApi: "openai", outApi: "openai", service: "deepseek" },
-    { afterTransform: [ enablePrefill ] }
+    { afterTransform: [ enablePrefill, removeReasonerStuff ] }
   ),
   deepseekProxy
 );
