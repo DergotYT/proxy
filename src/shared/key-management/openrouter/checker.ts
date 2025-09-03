@@ -31,7 +31,7 @@ export class OpenrouterKeyChecker {
     }
   }
 
-  private async validateKey(key: OpenrouterKey): Promise<"valid" | "invalid" | "quota"> {
+  private async validateKey(key: OpenrouterKey): Promise<"valid" | "invalid" | "quota" | "free"> {
     const controller = new AbortController();
     const timeout = setTimeout(() => {
       controller.abort();
@@ -39,7 +39,7 @@ export class OpenrouterKeyChecker {
     }, CHECK_TIMEOUT);
 
     try {
-      // Проверка ключа через OpenRouter API
+      // Проверка информации о ключе
       const keyInfoResponse = await fetch("https://openrouter.ai/api/v1/key", {
         method: "GET",
         headers: {
@@ -50,6 +50,14 @@ export class OpenrouterKeyChecker {
 
       if (keyInfoResponse.status !== 200) {
         return "invalid";
+      }
+
+      const keyInfo = await keyInfoResponse.json();
+      const isFreeTier = keyInfo.data?.is_free_tier;
+
+      // Если ключ бесплатный, возвращаем статус "free"
+      if (isFreeTier) {
+        return "free";
       }
 
       // Проверка возможности использования модели anthropic/claude-sonnet-4
@@ -101,7 +109,7 @@ export class OpenrouterKeyChecker {
 
   private handleCheckResult(
     key: OpenrouterKey,
-    result: "valid" | "invalid" | "quota"
+    result: "valid" | "invalid" | "quota" | "free"
   ): void {
     switch (result) {
       case "valid":
@@ -121,6 +129,14 @@ export class OpenrouterKeyChecker {
         break;
       case "quota":
         this.log.warn({ hash: key.hash }, "Key has exceeded its quota, disabling");
+        this.update(key.hash, {
+          isDisabled: true,
+          isOverQuota: true,
+          lastChecked: Date.now(),
+        });
+        break;
+      case "free":
+        this.log.warn({ hash: key.hash }, "Key is free tier, marking as over quota");
         this.update(key.hash, {
           isDisabled: true,
           isOverQuota: true,
