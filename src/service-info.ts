@@ -567,21 +567,19 @@ function addKeyToAggregates(k: KeyPoolKey) {
         addToFamily(`${f}__overQuota`, k.isOverQuota ? 1 : 0);
       });
       break;
-    case "openrouter":
-	  if (!keyIsOpenrouterKey(k)) throw new Error("Invalid key type");
-	  k.modelFamilies.forEach((f) => {
-		incrementGenericFamilyStats(f);
-		addToFamily(`${f}__overQuota`, k.isOverQuota ? 1 : 0);
-		// Добавляем информацию о балансе
-		if (k.isFreeTier) {
-			addToFamily(`${f}__freeBalance`, k.balance || 0);
-		} else {
-			addToFamily(`${f}__billingBalance`, k.balance || 0);
-			}
+   case "openrouter":
+		if (!keyIsOpenrouterKey(k)) throw new Error("Invalid key type");
+			k.modelFamilies.forEach((f) => {
+				incrementGenericFamilyStats(f);
+				addToFamily(`${f}__overQuota`, k.isOverQuota ? 1 : 0);
+			// Add balance information
+				if (k.isFreeTier) {
+					addToFamily(`${f}__freeBalance`, k.balance || 0);
+				} else {
+					addToFamily(`${f}__billingBalance`, k.balance || 0);
+				}
 		});
 		break;
-		});
-    break;
     case "xai":
       if (!keyIsXaiKey(k)) throw new Error("Invalid key type");
       k.modelFamilies.forEach((f) => {
