@@ -24,7 +24,6 @@ import {
   getGoogleAIModelFamily,
   getMistralAIModelFamily,
   getOpenAIModelFamily,
-  getOpenrouterModelFamily,
   MODEL_FAMILIES,
   ModelFamily,
 } from "../models";
@@ -744,7 +743,6 @@ function getModelFamilyForQuotaUsage(
   if (model.startsWith("claude-") && model.includes("@"))
     return getGcpModelFamily(model);
   if (model.startsWith("deepseek")) return "deepseek";
-  if (model.startsWith("openrouter")) return "openrouter";
 
   switch (api) {
     case "openai":

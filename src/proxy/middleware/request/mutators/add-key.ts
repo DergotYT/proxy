@@ -98,9 +98,6 @@ export const addKey: ProxyReqMutator = (manager) => {
     case "deepseek":
       manager.setHeader("Authorization", `Bearer ${assignedKey.key}`);
       break;
-    case "openrouter":
-      manager.setHeader("Authorization", `Bearer ${assignedKey.key}`);
-      break;
     case "xai":
       manager.setHeader("Authorization", `Bearer ${assignedKey.key}`);
       break;

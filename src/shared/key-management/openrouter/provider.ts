@@ -4,7 +4,7 @@ import { config } from "../../../config";
 import { logger } from "../../../logger";
 import { OpenrouterModelFamily, ModelFamily } from "../../models"; // Added ModelFamily
 
-// DeepseekKeyUsage is removed, tokenUsage from base Key interface will be used.
+// XaiKeyUsage is removed, tokenUsage from base Key interface will be used.
 export interface OpenrouterKey extends Key {
   readonly service: "openrouter";
   readonly modelFamilies: OpenrouterModelFamily[];
@@ -105,7 +105,7 @@ export class OpenrouterKeyProvider implements KeyProvider<OpenrouterKey> {
     if (!key.tokenUsage) {
       key.tokenUsage = {};
     }
-    // Deepseek only has one model family "deepseek"
+    // Xai only has one model family "xai"
     if (!key.tokenUsage[modelFamily]) {
       key.tokenUsage[modelFamily] = { input: 0, output: 0 };
     }

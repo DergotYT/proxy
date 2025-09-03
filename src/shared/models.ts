@@ -16,8 +16,8 @@ export type LLMService =
   | "gcp"
   | "azure"
   | "deepseek"
-  | "openrouter"
   | "xai"
+  | "openrouter"
   | "cohere"
   | "qwen"
   | "moonshot";
@@ -61,8 +61,8 @@ export type AwsBedrockModelFamily = `aws-${
 export type GcpModelFamily = "gcp-claude" | "gcp-claude-opus";
 export type AzureOpenAIModelFamily = `azure-${OpenAIModelFamily}`;
 export type DeepseekModelFamily = "deepseek";
-export type OpenrouterModelFamily = "openrouter";
 export type XaiModelFamily = "xai";
+export type OpenrouterModelFamily = "openrouter";
 export type CohereModelFamily = "cohere";
 export type QwenModelFamily = "qwen";
 export type MoonshotModelFamily = "moonshot";
@@ -76,8 +76,8 @@ export type ModelFamily =
   | GcpModelFamily
   | AzureOpenAIModelFamily
   | DeepseekModelFamily
-  | OpenrouterModelFamily
   | XaiModelFamily
+  | OpenrouterModelFamily
   | CohereModelFamily
   | QwenModelFamily
   | MoonshotModelFamily;
@@ -89,8 +89,8 @@ export const MODEL_FAMILIES = (<A extends readonly ModelFamily[]>(
   "qwen",
   "cohere",
   "xai",
-  "deepseek",
   "openrouter",
+  "deepseek",
   "turbo",
   "gpt4",
   "gpt4-32k",
@@ -167,8 +167,8 @@ export const LLM_SERVICES = (<A extends readonly LLMService[]>(
   "gcp",
   "azure",
   "deepseek",
-  "openrouter",
   "xai",
+  "openrouter",
   "cohere",
   "qwen",
   "moonshot"
@@ -181,8 +181,8 @@ export const MODEL_FAMILY_SERVICE: {
   qwen: "qwen",
   cohere: "cohere",
   xai: "xai",
-  deepseek: "deepseek",
   openrouter: "openrouter",
+  deepseek: "deepseek",
   turbo: "openai",
   gpt4: "openai",
   "gpt4-turbo": "openai",
@@ -442,6 +442,8 @@ export function getModelFamilyForRequest(req: Request): ModelFamily {
           modelFamily = "deepseek";
         } else if (req.service === "xai") {
           modelFamily = "xai";
+		  } else if (req.service === "openrouter") {
+          modelFamily = "openrouter";
         } else if (req.service === "moonshot") {
           modelFamily = "moonshot";
         } else {
@@ -450,9 +452,6 @@ export function getModelFamilyForRequest(req: Request): ModelFamily {
         break;
       case "google-ai":
         modelFamily = getGoogleAIModelFamily(model);
-        break;
-      case "openrouter":
-        modelFamily = getOpenrouterModelFamily(model);
         break;
       case "mistral-ai":
       case "mistral-text":
