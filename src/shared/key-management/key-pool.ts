@@ -62,7 +62,8 @@ export class KeyPool {
 	  isStreaming?: boolean,
 	  options?: any
 	): Key {
-	  const provider = this.keyProviders.get(service); // Изменили providers на keyProviders
+	  // Исправляем поиск провайдера
+	  const provider = this.keyProviders.find(p => p.service === service);
 	  if (!provider) {
 		throw new Error(`No key provider configured for ${service}`);
 	  }
