@@ -1108,3 +1108,5 @@ function assertJsonResponse(body: any): asserts body is Record<string, any> {
     throw new Error(`Expected response to be an object, got ${typeof body}`);
   }
 }
+}
+
