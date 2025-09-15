@@ -38,6 +38,7 @@ export class OpenrouterKeyChecker {
       this.log.warn({ hash: key.hash }, "Key validation timed out after " + CHECK_TIMEOUT + "ms");
     }, CHECK_TIMEOUT);
 
+
     try {
       // Проверка информации о ключе
       const keyInfoResponse = await fetch("https://openrouter.ai/api/v1/key", {
@@ -48,6 +49,7 @@ export class OpenrouterKeyChecker {
         },
         signal: controller.signal,
       });
+
 
       if (keyInfoResponse.status !== 200) {
         return "invalid";
@@ -85,7 +87,7 @@ export class OpenrouterKeyChecker {
               content: "Hello"
             }
           ],
-          max_tokens: 10
+          max_tokens: 1000
         }),
         signal: controller.signal,
       });
