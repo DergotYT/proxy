@@ -1,3 +1,11 @@
+import { AnthropicChatMessage } from "../../../../shared/api-schemas";
+import { containsImageContent } from "../../../../shared/api-schemas/anthropic";
+import { Key, OpenAIKey, keyPool } from "../../../../shared/key-management";
+import { isEmbeddingsRequest } from "../../common";
+import { assertNever } from "../../../../shared/utils";
+import { ProxyReqMutator } from "../index";
+import { isFreeOpenRouterModel } from "../../../../shared/models/openrouter-free-models";
+
 export const addKey: ProxyReqMutator = (manager) => {
   const req = manager.request;
 
