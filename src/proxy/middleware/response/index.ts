@@ -306,6 +306,10 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
 	  }
 	} else if (statusCode === 403) {
 	  switch (service) {
+	    case "xai":
+			await reenqueueRequest(req);
+			throw new RetryableError("XAI key lacks permissions, retrying with different key.");
+
 		case "anthropic":
 		  if (
 			errorType === "permission_error" &&
@@ -417,6 +421,11 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
           break;
       default:
         assertNever(service as never);
+  } else if (statusCode === 405) {
+    // Xai specific - method not allowed, treat as retryable
+    if (service === "xai") {
+      await reenqueueRequest(req);
+            throw new RetryableError("XAI key method not allowed, retrying with different key.");
     }
   } else if (statusCode === 404) {
     // Most likely model not found
@@ -432,6 +441,10 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
           );
         }
         break;
+      case "xai":
+        await reenqueueRequest(req);
+        throw new RetryableError("XAI API returned 404, retrying with different key.");
+
       case "anthropic":
       case "google-ai":
       case "mistral-ai":
@@ -439,7 +452,6 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
       case "gcp":
       case "azure":
       case "deepseek":
-      case "xai":
       case "openrouter":
       case "cohere":
       case "qwen":

@@ -98,14 +98,16 @@ const textToChatPreprocessor = createPreprocessorMiddleware(
 
 /**
  * Routes text completion prompts to aws anthropic-chat if they need translation
- * (claude-3 based models do not support the old text completion endpoint).
+ * (claude-3 and claude-4 based models do not support the old text completion endpoint).
  */
 const preprocessAwsTextRequest: RequestHandler = (req, res, next) => {
-  if (req.body.model?.includes("claude-3")) {
-    textToChatPreprocessor(req, res, next);
-  } else {
-    nativeTextPreprocessor(req, res, next);
-  }
+	const model = req.body.model;
+	const isClaude4Model = model?.includes("claude-sonnet-4") || model?.includes("claude-opus-4");
+	if (model?.includes("claude-3") || isClaude4Model) {
+		textToChatPreprocessor(req, res, next);
+	} else {
+		nativeTextPreprocessor(req, res, next);
+	}
 };
 
 const oaiToAwsTextPreprocessor = createPreprocessorMiddleware(
@@ -123,11 +125,13 @@ const oaiToAwsChatPreprocessor = createPreprocessorMiddleware(
  * or the new Claude chat completion endpoint, based on the requested model.
  */
 const preprocessOpenAICompatRequest: RequestHandler = (req, res, next) => {
-  if (req.body.model?.includes("claude-3")) {
-    oaiToAwsChatPreprocessor(req, res, next);
-  } else {
-    oaiToAwsTextPreprocessor(req, res, next);
-  }
+	const model = req.body.model;
+	const isClaude4Model = model?.includes("claude-sonnet-4") || model?.includes("claude-opus-4");
+	if (model?.includes("claude-3") || isClaude4Model) {
+		oaiToAwsChatPreprocessor(req, res, next);
+	} else {
+		oaiToAwsTextPreprocessor(req, res, next);
+	}
 };
 
 const awsClaudeRouter = Router();
