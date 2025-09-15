@@ -420,7 +420,7 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
         break;
       default:
         assertNever(service as never);
-  } else if (statusCode === 405) {
+  }} else if (statusCode === 405) {
 		// Xai specific - method not allowed, treat as retryable
 		if (service === "xai") {
 		await reenqueueRequest(req);
@@ -1108,5 +1108,3 @@ function assertJsonResponse(body: any): asserts body is Record<string, any> {
     throw new Error(`Expected response to be an object, got ${typeof body}`);
   }
 }
-}
-
