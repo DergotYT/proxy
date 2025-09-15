@@ -53,7 +53,6 @@ export class OpenrouterKeyChecker {
         return "invalid";
       }
 
-      // Обрабатываем ответ как текст сначала, на случай если это не JSON
       const keyInfoText = await keyInfoResponse.text();
       let keyInfo;
       
@@ -64,14 +63,13 @@ export class OpenrouterKeyChecker {
         return "invalid";
       }
 
+      // Проверяем, является ли ключ бесплатным
       const isFreeTier = keyInfo.data?.is_free_tier;
-
-      // Если ключ бесплатный, возвращаем статус "free"
       if (isFreeTier) {
         return "free";
       }
 
-      // Проверка возможности использования модели anthropic/claude-sonnet-4
+      // Проверка возможности использования платной модели
       const testResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -92,43 +90,20 @@ export class OpenrouterKeyChecker {
         signal: controller.signal,
       });
 
-      // Обрабатываем ответ как текст сначала
       const responseText = await testResponse.text();
-      let responseData;
       
-      try {
-        responseData = JSON.parse(responseText);
-      } catch (e) {
-        // Если ответ не JSON, но статус 200 или 400, считаем ключ валидным
-        if (testResponse.status === 200 || testResponse.status === 400) {
-          return "valid";
-        } else if (testResponse.status === 429) {
-          return "quota";
-        } else {
-          this.log.warn({ hash: key.hash, status: testResponse.status, response: responseText }, 
-            "Unexpected non-JSON response");
-          return "invalid";
-        }
-      }
-
-      // Если мы получили JSON, обрабатываем как обычно
       if (testResponse.status === 200 || testResponse.status === 400) {
         return "valid";
       } else if (testResponse.status === 429) {
         return "quota";
-      } else if (testResponse.status === 403) {
-        this.log.warn(
-          { status: testResponse.status, hash: key.hash },
-          "Forbidden (403) response, key is invalid"
-        );
-        return "invalid";
-      } else {
-        this.log.warn(
-          { status: testResponse.status, hash: key.hash },
-          "Unexpected status code while testing key usage"
-        );
-        return "invalid";
+      } else if (testResponse.status === 402) {
+        // Проверяем сообщение об ошибке для определения типа платного ключа
+        if (responseText.includes("Insufficient credits") || responseText.includes("requires more credits")) {
+          return "quota";
+        }
       }
+      
+      return "invalid";
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         this.log.warn({ hash: key.hash }, "Key validation aborted");
@@ -145,9 +120,10 @@ export class OpenrouterKeyChecker {
   ): void {
     switch (result) {
       case "valid":
-        this.log.info({ hash: key.hash }, "Key is valid and enabled");
+        this.log.info({ hash: key.hash }, "Key is valid paid key");
         this.update(key.hash, {
           isDisabled: false,
+          isFreeTier: false,
           lastChecked: Date.now(),
         });
         break;
@@ -168,10 +144,10 @@ export class OpenrouterKeyChecker {
         });
         break;
       case "free":
-        this.log.warn({ hash: key.hash }, "Key is free tier, marking as over quota");
+        this.log.warn({ hash: key.hash }, "Key is free tier, marking as free");
         this.update(key.hash, {
-          isDisabled: true,
-          isOverQuota: true,
+          isDisabled: false, // Можно оставить включенным для бесплатных моделей
+          isFreeTier: true,
           lastChecked: Date.now(),
         });
         break;

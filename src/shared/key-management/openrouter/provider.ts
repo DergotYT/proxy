@@ -9,6 +9,7 @@ export interface OpenrouterKey extends Key {
   readonly service: "openrouter";
   readonly modelFamilies: OpenrouterModelFamily[];
   isOverQuota: boolean;
+  isFreeTier: boolean;
 }
 
 export class OpenrouterKeyProvider implements KeyProvider<OpenrouterKey> {
@@ -41,6 +42,7 @@ export class OpenrouterKeyProvider implements KeyProvider<OpenrouterKey> {
         rateLimitedUntil: 0,
         tokenUsage: {}, // Initialize new tokenUsage field
         isOverQuota: false,
+        isFreeTier: false, // Инициализируем как false
       });
     }
   }

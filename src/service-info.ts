@@ -132,7 +132,7 @@ const keyIsDeepseekKey = (k: KeyPoolKey): k is DeepseekKey =>
   k.service === "deepseek";
 const keyIsXaiKey = (k: KeyPoolKey): k is XaiKey =>
   k.service === "xai";
-  const keyIsOpenrouterKey = (k: KeyPoolKey): k is OpenrouterKey =>
+const keyIsOpenrouterKey = (k: KeyPoolKey): k is OpenrouterKey =>
   k.service === "openrouter";
 const keyIsCohereKey = (k: KeyPoolKey): k is CohereKey =>
   k.service === "cohere";
@@ -576,15 +576,19 @@ function addKeyToAggregates(k: KeyPoolKey) {
         }
       });
       break;
-	  case "openrouter":
-      if (!keyIsOpenrouterKey(k)) throw new Error("Invalid key type");
-      k.modelFamilies.forEach((f) => {
-        incrementGenericFamilyStats(f);
-        if ('isOverQuota' in k) {
-          addToFamily(`${f}__overQuota`, k.isOverQuota ? 1 : 0);
-        }
-      });
-      break;
+	case "openrouter":
+	  if (!keyIsOpenrouterKey(k)) throw new Error("Invalid key type");
+	  k.modelFamilies.forEach((f) => {
+		incrementGenericFamilyStats(f);
+		if ('isOverQuota' in k) {
+		  addToFamily(`${f}__overQuota`, k.isOverQuota ? 1 : 0);
+		}
+		// Добавляем подсчет бесплатных ключей
+		if ('isFreeTier' in k) {
+		  addToFamily(`${f}__trial`, k.isFreeTier ? 1 : 0);
+		}
+	  });
+	  break;
     case "cohere":
       if (!keyIsCohereKey(k)) throw new Error("Invalid key type");
       k.modelFamilies.forEach((f) => {
@@ -750,6 +754,7 @@ function getInfoForFamily(family: ModelFamily): BaseFamilyInfo {
         break;
 		case "openrouter":
         info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
+		info.trialKeys = familyStats.get(`${family}__trial`) || 0; // Добавлено
         break;
       case "cohere":
         info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
