@@ -281,23 +281,22 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
     keyPool.disable(req.key!, "revoked");
     await reenqueueRequest(req);
     throw new RetryableError(`${service} key authentication failed, retrying with different key.`);
-	} else if (statusCode === 402) {
+  } else if (statusCode === 402) {
 	  // OpenRouter specific - insufficient credits
-	  if (service === "openrouter") {
-		const errorMessage = errorPayload.error?.message || '';
-		
+	if (service === "openrouter") {
+	 const errorMessage = errorPayload.error?.message || '';
 		// Проверяем тип ошибки 402
 		if (errorMessage.includes("Insufficient credits") || 
 			errorMessage.includes("requires more credits")) {
 		  // Это ошибка недостатка кредитов - не отключаем ключ, просто показываем ошибку
-		  errorPayload.proxy_note = `OpenRouter: ${errorMessage}`;
+			errorPayload.proxy_note = `OpenRouter: ${errorMessage}`;
 		} else {
-		  // Другие ошибки 402 - отключаем ключ
-		  keyPool.disable(req.key!, "quota");
-		  await reenqueueRequest(req);
-		  throw new RetryableError("Openrouter key has insufficient balance, retrying with different key.");
+			// Другие ошибки 402 - отключаем ключ
+			keyPool.disable(req.key!, "quota");
+			await reenqueueRequest(req);
+			throw new RetryableError("Openrouter key has insufficient balance, retrying with different key.");
 		}
-	  }
+	}
 	  // Deepseek specific - insufficient balance
 	  if (service === "deepseek") {
 		keyPool.disable(req.key!, "quota");
@@ -403,30 +402,30 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
       case "deepseek":
         await handleDeepseekRateLimitError(req, errorPayload);
         break;
-        case "xai":
-          await handleXaiRateLimitError(req, errorPayload);
-          break;
-		  case "openrouter":
-          await handleOpenrouterRateLimitError(req, errorPayload);
-          break;
-        case "cohere":
-          await handleCohereRateLimitError(req, errorPayload);
-          break;
-        case "qwen":
-          // Similar handling to OpenAI for rate limits
-          await handleOpenAIRateLimitError(req, errorPayload);
-          break;
-        case "moonshot":
-          await handleMoonshotRateLimitError(req, errorPayload);
-          break;
+      case "xai":
+        await handleXaiRateLimitError(req, errorPayload);
+        break;
+	  case "openrouter":
+        await handleOpenrouterRateLimitError(req, errorPayload);
+        break;
+      case "cohere":
+        await handleCohereRateLimitError(req, errorPayload);
+        break;
+      case "qwen":
+        // Similar handling to OpenAI for rate limits
+        await handleOpenAIRateLimitError(req, errorPayload);
+        break;
+      case "moonshot":
+        await handleMoonshotRateLimitError(req, errorPayload);
+        break;
       default:
         assertNever(service as never);
   } else if (statusCode === 405) {
-    // Xai specific - method not allowed, treat as retryable
-    if (service === "xai") {
-      await reenqueueRequest(req);
-            throw new RetryableError("XAI key method not allowed, retrying with different key.");
-    }
+		// Xai specific - method not allowed, treat as retryable
+		if (service === "xai") {
+		await reenqueueRequest(req);
+			throw new RetryableError("XAI key method not allowed, retrying with different key.");
+		}
   } else if (statusCode === 404) {
     // Most likely model not found
     switch (service) {
