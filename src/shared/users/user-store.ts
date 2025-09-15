@@ -743,6 +743,8 @@ function getModelFamilyForQuotaUsage(
   if (model.startsWith("claude-") && model.includes("@"))
     return getGcpModelFamily(model);
   if (model.startsWith("deepseek")) return "deepseek";
+  if (model.startsWith("grok-")) return "xai";
+  if (model.startsWith("kimi")) return "moonshot";
 
   switch (api) {
     case "openai":

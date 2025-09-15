@@ -134,8 +134,8 @@ export const validateContextSize: RequestPreprocessor = async (req) => {
   } else if (model.match(/^deepseek/)) {
     modelMax = 128000;
   } else if (model.match(/^kimi-k2/)) {
-    // Kimi K2 models have 131k context window
-    modelMax = 131000;
+    // Kimi K2 models have 245k context window
+    modelMax = 245000;
   } else if (model.match(/moonshot/)) {
     // Moonshot models typically have 200k context window
     modelMax = 200000;

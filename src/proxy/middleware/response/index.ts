@@ -286,11 +286,10 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
       throw new RetryableError("Deepseek key has insufficient balance, retrying with different key.");
     }
   } else if (statusCode === 405) {
-    // Xai specific - insufficient balance
+    // Xai specific - method not allowed, treat as retryable
     if (service === "xai") {
-      keyPool.disable(req.key!, "quota");
       await reenqueueRequest(req);
-      throw new RetryableError("XAI key has insufficient balance, retrying with different key.");
+            throw new RetryableError("XAI key method not allowed, retrying with different key.");
     }
   } else if (statusCode === 403) {
     switch (service) {
@@ -342,6 +341,10 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
         keyPool.disable(req.key!, "revoked");
         await reenqueueRequest(req);
         throw new RetryableError("Moonshot key is invalid, retrying with different key.");
+	  case "xai":
+        await reenqueueRequest(req);
+        throw new RetryableError("XAI key lacks permissions, retrying with different key.");
+
     }
   } else if (statusCode === 429) {
     switch (service) {
@@ -384,7 +387,7 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
         assertNever(service as never);
     }
   } else if (statusCode === 404) {
-    // Most likely model not found
+    // Most likely model not found, but for xAI treat as retryable
     switch (service) {
       case "openai":
         if (errorType === "model_not_found") {
@@ -397,6 +400,10 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
           );
         }
         break;
+	  case "xai":
+        await reenqueueRequest(req);
+        throw new RetryableError("XAI API returned 404, retrying with different key.");
+
       case "anthropic":
       case "google-ai":
       case "mistral-ai":
@@ -404,7 +411,6 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
       case "gcp":
       case "azure":
       case "deepseek":
-      case "xai":
       case "cohere":
       case "qwen":
         errorPayload.proxy_note = `The key assigned to your prompt does not support the requested model.`;
@@ -412,6 +418,7 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
       default:
         assertNever(service as never);
     }
+	
   } else if (statusCode === 503) {
     switch (service) {
       case "aws":
