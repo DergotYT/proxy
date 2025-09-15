@@ -55,27 +55,17 @@ export class KeyPool {
     this.scheduleRecheck();
   }
 
-	public get(
-	  model: string,
-	  service: LLMService,
-	  needsMultimodal?: boolean,
-	  isStreaming?: boolean,
-	  options?: any
-	): Key {
-	  // Исправляем поиск провайдера
-	  const provider = this.keyProviders.find(p => p.service === service);
-	  if (!provider) {
-		throw new Error(`No key provider configured for ${service}`);
-	  }
+  public get(model: string, service?: LLMService, multimodal?: boolean, streaming?: boolean): Key {
+    // hack for some claude requests needing keys with particular permissions
+    // even though they use the same models as the non-multimodal requests
+    if (multimodal) {
+      model += "-multimodal";
+    }
+    
+    const queryService = service || this.getServiceForModel(model);
+    return this.getKeyProvider(queryService).get(model, streaming);
+  }
 
-	  // Для совместимости со старым кодом, проверяем поддерживает ли провайдер новый формат
-	  if (typeof (provider as any).getWithOptions === 'function') {
-		return (provider as any).getWithOptions(model, needsMultimodal, isStreaming, options);
-	  } else {
-		// Старый формат вызова для обратной совместимости
-		return provider.get(model, needsMultimodal, isStreaming);
-	  }
-	}
   public list(): Omit<Key, "key">[] {
     return this.keyProviders.flatMap((provider) => provider.list());
   }

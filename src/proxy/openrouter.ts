@@ -6,7 +6,6 @@ import { addKey, finalizeBody } from "./middleware/request";
 import { ProxyResHandlerWithBody } from "./middleware/response";
 import axios from "axios";
 import { OpenrouterKey, keyPool } from "../shared/key-management";
-import { isFreeOpenRouterModel } from "../shared/models/openrouter-free-models";
 
 let modelsCache: any = null;
 let modelsCacheTime = 0;
@@ -131,25 +130,38 @@ const openrouterProxy = createQueuedProxyMiddleware({
 const openrouterRouter = Router();
 
 // Function to handle OpenRouter-specific request transformations
-// Обновим функцию prepareOpenRouterRequest
 function prepareOpenRouterRequest(req: Request) {
-  // Установим max_tokens по умолчанию в 1000
-  if (req.body.max_tokens === undefined) {
-    req.body.max_tokens = 1000;
+  // OpenRouter doesn't need the same transformations as XAI
+  // Remove any XAI-specific parameters that might cause issues
+  const unsupportedParams = [
+    'reasoning_effort',
+    'prefix',
+    'frequency_penalty',
+    'presence_penalty'
+  ];
+  
+  for (const param of unsupportedParams) {
+    if (req.body[param] !== undefined) {
+      req.log.info(`Removing unsupported parameter for OpenRouter: ${param}`);
+      delete req.body[param];
+    }
   }
   
-  // Проверим, является ли модель бесплатной
-  const model = req.body.model;
-  const isFreeModel = isFreeOpenRouterModel(model);
-  
-  // Если ключ бесплатный, но модель платная - выдаем ошибку
-  if (req.key && (req.key as OpenrouterKey).isFreeTier && !isFreeModel) {
-    throw new Error(
-      `Free tier OpenRouter keys can only be used with free models. ` +
-      `Model '${model}' is not a free model. ` +
-      `Please use a paid key or select a free model.`
-    );
-}}
+  // Ensure the model format is correct for OpenRouter
+  if (req.body.model) {
+    // Convert any XAI model names to OpenRouter format if needed
+    const modelMappings: Record<string, string> = {
+      "grok-3-mini": "anthropic/claude-3-haiku",
+      "grok-3": "anthropic/claude-3-opus",
+      "grok-2-image": "stability-ai/stable-diffusion-xl"
+    };
+    
+    if (modelMappings[req.body.model]) {
+      req.log.info(`Mapping model ${req.body.model} to ${modelMappings[req.body.model]}`);
+      req.body.model = modelMappings[req.body.model];
+    }
+  }
+}
 
 // Handler for image generation requests
 const handleImageGenerationRequest: RequestHandler = async (req, res) => {
