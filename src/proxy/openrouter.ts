@@ -150,6 +150,7 @@ function prepareOpenRouterRequest(req: Request) {
       `Please use a paid key or select a free model.`
     );
   }
+}
 
 // Handler for image generation requests
 const handleImageGenerationRequest: RequestHandler = async (req, res) => {
