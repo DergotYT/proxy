@@ -4,6 +4,7 @@ import { Key, OpenAIKey, keyPool } from "../../../../shared/key-management";
 import { isEmbeddingsRequest } from "../../common";
 import { assertNever } from "../../../../shared/utils";
 import { ProxyReqMutator } from "../index";
+import { isFreeOpenRouterModel } from "../../../../shared/models/openrouter-free-models";
 
 export const addKey: ProxyReqMutator = (manager) => {
   const req = manager.request;
@@ -33,7 +34,27 @@ export const addKey: ProxyReqMutator = (manager) => {
   if (inboundApi === outboundApi) {
     // Pass streaming information for GPT-5 models that require verified keys for streaming
     const isStreaming = body.stream === true;
-    assignedKey = keyPool.get(body.model, service, needsMultimodal, isStreaming);
+    
+    // Special handling for OpenRouter
+	if (service === "openrouter") {
+	  const model = body.model;
+	  const isFreeModel = isFreeOpenRouterModel(model);
+	  
+	  if (isFreeModel) {
+		// Для бесплатных моделей сначала пробуем использовать бесплатные ключи
+		try {
+		  assignedKey = keyPool.get(model, service, needsMultimodal, isStreaming, { freeTierOnly: true });
+		} catch {
+		  // Если бесплатных ключей нет, используем любые доступные
+		  assignedKey = keyPool.get(model, service, needsMultimodal, isStreaming);
+		}
+	  } else {
+		// Для платных моделей используем только платные ключи
+		assignedKey = keyPool.get(model, service, needsMultimodal, isStreaming, { freeTierOnly: false });
+	  }
+	} else {
+	  assignedKey = keyPool.get(body.model, service, needsMultimodal, isStreaming);
+	}
   } else {
     switch (outboundApi) {
       // If we are translating between API formats we may need to select a model
@@ -101,7 +122,7 @@ export const addKey: ProxyReqMutator = (manager) => {
     case "xai":
       manager.setHeader("Authorization", `Bearer ${assignedKey.key}`);
       break;
-	  case "openrouter":
+	case "openrouter":
       manager.setHeader("Authorization", `Bearer ${assignedKey.key}`);
       break;
     case "cohere":

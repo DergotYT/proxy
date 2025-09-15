@@ -65,11 +65,23 @@ export class OpenrouterKeyProvider implements KeyProvider<OpenrouterKey> {
     }
   }
 
-  public get(model: string): OpenrouterKey {
-    const availableKeys = this.keys.filter((k) => !k.isDisabled);
-    if (availableKeys.length === 0) {
-      throw new Error("No Openrouter keys available");
+  public get(model: string, needsMultimodal?: boolean, isStreaming?: boolean): OpenrouterKey {
+    return this.getWithOptions(model, needsMultimodal, isStreaming, {});
+  }
+
+  // Новый метод с поддержкой опций
+  public getWithOptions(model: string, needsMultimodal?: boolean, isStreaming?: boolean, options?: any): OpenrouterKey {
+    let availableKeys = this.keys.filter((k) => !k.isDisabled);
+    
+    // Фильтрация по типу ключа, если указана опция
+    if (options?.freeTierOnly !== undefined) {
+      availableKeys = availableKeys.filter(k => k.isFreeTier === options.freeTierOnly);
     }
+
+    if (availableKeys.length === 0) {
+      throw new Error(`No Openrouter keys available with freeTier=${options?.freeTierOnly}`);
+    }
+
     const key = availableKeys[Math.floor(Math.random() * availableKeys.length)];
     key.lastUsed = Date.now();
     this.throttle(key.hash);

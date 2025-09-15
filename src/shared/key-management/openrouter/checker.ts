@@ -31,7 +31,7 @@ export class OpenrouterKeyChecker {
     }
   }
 
-  private async validateKey(key: OpenrouterKey): Promise<"valid" | "invalid" | "quota" | "free"> {
+ private async validateKey(key: OpenrouterKey): Promise<"valid" | "invalid" | "quota" | "free"> {
     const controller = new AbortController();
     const timeout = setTimeout(() => {
       controller.abort();
@@ -69,7 +69,7 @@ export class OpenrouterKeyChecker {
         return "free";
       }
 
-      // Проверка возможности использования платной модели
+      // Для платных ключей проверяем возможность использования платных моделей
       const testResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -78,7 +78,7 @@ export class OpenrouterKeyChecker {
           Authorization: `Bearer ${key.key}`,
         },
         body: JSON.stringify({
-          model: "anthropic/claude-sonnet-4",
+          model: "anthropic/claude-sonnet-4", // платная модель
           messages: [
             {
               role: "user",
