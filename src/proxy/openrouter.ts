@@ -143,14 +143,13 @@ function prepareOpenRouterRequest(req: Request) {
   const isFreeModel = isFreeOpenRouterModel(model);
   
   // Если ключ бесплатный, но модель платная - выдаем ошибку
-  if (req.key?.isFreeTier && !isFreeModel) {
+  if (req.key && (req.key as OpenrouterKey).isFreeTier && !isFreeModel) {
     throw new Error(
       `Free tier OpenRouter keys can only be used with free models. ` +
       `Model '${model}' is not a free model. ` +
       `Please use a paid key or select a free model.`
     );
-  }
-}
+}}
 
 // Handler for image generation requests
 const handleImageGenerationRequest: RequestHandler = async (req, res) => {

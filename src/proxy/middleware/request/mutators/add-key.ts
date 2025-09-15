@@ -1,11 +1,3 @@
-import { AnthropicChatMessage } from "../../../../shared/api-schemas";
-import { containsImageContent } from "../../../../shared/api-schemas/anthropic";
-import { Key, OpenAIKey, keyPool } from "../../../../shared/key-management";
-import { isEmbeddingsRequest } from "../../common";
-import { assertNever } from "../../../../shared/utils";
-import { ProxyReqMutator } from "../index";
-import { isFreeOpenRouterModel } from "../../../../shared/models/openrouter-free-models";
-
 export const addKey: ProxyReqMutator = (manager) => {
   const req = manager.request;
 
@@ -18,6 +10,10 @@ export const addKey: ProxyReqMutator = (manager) => {
     );
     req.log.error({ inboundApi, outboundApi, path: req.path }, err.message);
     throw err;
+  }
+
+  if (!service) {
+    throw new Error("Service is undefined");
   }
 
   if (!body?.model) {
@@ -36,25 +32,25 @@ export const addKey: ProxyReqMutator = (manager) => {
     const isStreaming = body.stream === true;
     
     // Special handling for OpenRouter
-	if (service === "openrouter") {
-	  const model = body.model;
-	  const isFreeModel = isFreeOpenRouterModel(model);
-	  
-	  if (isFreeModel) {
-		// Для бесплатных моделей сначала пробуем использовать бесплатные ключи
-		try {
-		  assignedKey = keyPool.get(model, service, needsMultimodal, isStreaming, { freeTierOnly: true });
-		} catch {
-		  // Если бесплатных ключей нет, используем любые доступные
-		  assignedKey = keyPool.get(model, service, needsMultimodal, isStreaming);
-		}
-	  } else {
-		// Для платных моделей используем только платные ключи
-		assignedKey = keyPool.get(model, service, needsMultimodal, isStreaming, { freeTierOnly: false });
-	  }
-	} else {
-	  assignedKey = keyPool.get(body.model, service, needsMultimodal, isStreaming);
-	}
+    if (service === "openrouter") {
+      const model = body.model;
+      const isFreeModel = isFreeOpenRouterModel(model);
+      
+      if (isFreeModel) {
+        // Для бесплатных моделей сначала пробуем использовать бесплатные ключи
+        try {
+          assignedKey = keyPool.get(model, service, needsMultimodal, isStreaming, { freeTierOnly: true });
+        } catch {
+          // Если бесплатных ключей нет, используем любые доступные
+          assignedKey = keyPool.get(model, service, needsMultimodal, isStreaming);
+        }
+      } else {
+        // Для платных моделей используем только платные ключи
+        assignedKey = keyPool.get(model, service, needsMultimodal, isStreaming, { freeTierOnly: false });
+      }
+    } else {
+      assignedKey = keyPool.get(body.model, service, needsMultimodal, isStreaming);
+    }
   } else {
     switch (outboundApi) {
       // If we are translating between API formats we may need to select a model
@@ -140,37 +136,5 @@ export const addKey: ProxyReqMutator = (manager) => {
       throw new Error("add-key should not be used for this service.");
     default:
       assertNever(assignedKey.service);
-  }
-};
-
-/**
- * Special case for embeddings requests which don't go through the normal
- * request pipeline.
- */
-export const addKeyForEmbeddingsRequest: ProxyReqMutator = (manager) => {
-  const req = manager.request;
-  if (!isEmbeddingsRequest(req)) {
-    throw new Error(
-      "addKeyForEmbeddingsRequest called on non-embeddings request"
-    );
-  }
-
-  if (req.inboundApi !== "openai") {
-    throw new Error("Embeddings requests must be from OpenAI");
-  }
-
-  manager.setBody({ input: req.body.input, model: "text-embedding-ada-002" });
-
-  const key = keyPool.get("text-embedding-ada-002", "openai") as OpenAIKey;
-
-  manager.setKey(key);
-  req.log.info(
-    { key: key.hash, toApi: req.outboundApi },
-    "Assigned Turbo key to embeddings request"
-  );
-
-  manager.setHeader("Authorization", `Bearer ${key.key}`);
-  if (key.organizationId) {
-    manager.setHeader("OpenAI-Organization", key.organizationId);
   }
 };

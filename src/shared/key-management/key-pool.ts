@@ -62,7 +62,7 @@ export class KeyPool {
 	  isStreaming?: boolean,
 	  options?: any
 	): Key {
-	  const provider = this.providers.get(service);
+	  const provider = this.keyProviders.get(service); // Изменили providers на keyProviders
 	  if (!provider) {
 		throw new Error(`No key provider configured for ${service}`);
 	  }
@@ -75,7 +75,6 @@ export class KeyPool {
 		return provider.get(model, needsMultimodal, isStreaming);
 	  }
 	}
-
   public list(): Omit<Key, "key">[] {
     return this.keyProviders.flatMap((provider) => provider.list());
   }
