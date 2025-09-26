@@ -28,10 +28,10 @@ const LOGIN_ROUTE   = "/";
 
 const MODEL_FAMILY_FRIENDLY_NAME: { [f in ModelFamily]: string } = {
   qwen: "Qwen",
+  glm: "GLM",
   cohere: "Cohere",
   deepseek: "Deepseek",
   xai: "Grok",
-  openrouter: "openrouter",
   moonshot: "Moonshot",
   turbo: "GPT-4o Mini / 3.5 Turbo",
   gpt4: "GPT-4",

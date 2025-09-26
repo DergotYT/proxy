@@ -7,9 +7,9 @@ import {
   keyPool,
   OpenAIKey,
   XaiKey,
-  OpenrouterKey,
   CohereKey,
   QwenKey,
+  GlmKey,
   MoonshotKey,
 } from "./shared/key-management";
 import {
@@ -27,9 +27,9 @@ import {
   OpenAIModelFamily,
   DeepseekModelFamily,
   XaiModelFamily,
-  OpenrouterModelFamily,
   CohereModelFamily,
   QwenModelFamily,
+  GlmModelFamily,
   MoonshotModelFamily,
 } from "./shared/models";
 import { getCostSuffix, getTokenCostUsd, prettyTokens } from "./shared/stats";
@@ -115,9 +115,9 @@ const MODEL_FAMILY_ORDER: ModelFamily[] = [
   // Other services
   "deepseek",
   "xai",
-  "openrouter",
   "cohere",
   "qwen",
+  "glm",
   "moonshot"
 ];
 
@@ -132,12 +132,12 @@ const keyIsDeepseekKey = (k: KeyPoolKey): k is DeepseekKey =>
   k.service === "deepseek";
 const keyIsXaiKey = (k: KeyPoolKey): k is XaiKey =>
   k.service === "xai";
-const keyIsOpenrouterKey = (k: KeyPoolKey): k is OpenrouterKey =>
-  k.service === "openrouter";
 const keyIsCohereKey = (k: KeyPoolKey): k is CohereKey =>
   k.service === "cohere";
 const keyIsQwenKey = (k: KeyPoolKey): k is QwenKey =>
   k.service === "qwen";
+const keyIsGlmKey = (k: KeyPoolKey): k is GlmKey =>
+  k.service === "glm";
 const keyIsMoonshotKey = (k: KeyPoolKey): k is MoonshotKey =>
   k.service === "moonshot";
 
@@ -211,8 +211,8 @@ export type ServiceInfo = {
   endpoints: {
     openai?: string;
     deepseek?: string;
+    glm?: string;
     xai?: string;
-    openrouter?: string;
     anthropic?: string;
     "google-ai"?: string;
     "mistral-ai"?: string;
@@ -227,7 +227,6 @@ export type ServiceInfo = {
   proomptersNow?: number;
   status?: string;
   config: ReturnType<typeof listConfig>;
-  build: string;
 } & { [f in OpenAIModelFamily]?: OpenAIInfo }
   & { [f in AnthropicModelFamily]?: AnthropicInfo; }
   & { [f in AwsBedrockModelFamily]?: AwsInfo }
@@ -237,9 +236,9 @@ export type ServiceInfo = {
   & { [f in MistralAIModelFamily]?: BaseFamilyInfo }
   & { [f in DeepseekModelFamily]?: BaseFamilyInfo }
   & { [f in XaiModelFamily]?: BaseFamilyInfo }
-  & { [f in OpenrouterModelFamily]?: BaseFamilyInfo }
   & { [f in CohereModelFamily]?: BaseFamilyInfo }
   & { [f in QwenModelFamily]?: BaseFamilyInfo }
+  & { [f in GlmModelFamily]?: BaseFamilyInfo }
   & { [f in MoonshotModelFamily]?: BaseFamilyInfo };
 
 // https://stackoverflow.com/a/66661477
@@ -288,14 +287,14 @@ const SERVICE_ENDPOINTS: { [s in LLMService]: Record<string, string> } = {
   xai: {
     xai: `%BASE%/xai`,
   },
-  openrouter: {
-    openrouter: `%BASE%/openrouter`,
-  },
   cohere: {
     cohere: `%BASE%/cohere`,
   },
   qwen: {
     qwen: `%BASE%/qwen`,
+  },
+  glm: {
+    glm: `%BASE%/glm`,
   },
   moonshot: {
     moonshot: `%BASE%/moonshot`,
@@ -349,7 +348,6 @@ export function buildInfo(baseUrl: string, forAdmin = false): ServiceInfo {
     status,
     ...modelFamilyInfo,
     config: listConfig(),
-    build: process.env.BUILD_INFO || "dev",
   });
 }
 
@@ -457,9 +455,9 @@ function addKeyToAggregates(k: KeyPoolKey) {
   addToService("azure__keys", k.service === "azure" ? 1 : 0);
   addToService("deepseek__keys", k.service === "deepseek" ? 1 : 0);
   addToService("xai__keys", k.service === "xai" ? 1 : 0);
-  addToService("openrouter__keys", k.service === "openrouter" ? 1 : 0);
   addToService("cohere__keys", k.service === "cohere" ? 1 : 0);
   addToService("qwen__keys", k.service === "qwen" ? 1 : 0);
+  addToService("glm__keys", k.service === "glm" ? 1 : 0);
   addToService("moonshot__keys", k.service === "moonshot" ? 1 : 0);
 
   let sumInputTokens = 0;
@@ -576,19 +574,6 @@ function addKeyToAggregates(k: KeyPoolKey) {
         }
       });
       break;
-	case "openrouter":
-	  if (!keyIsOpenrouterKey(k)) throw new Error("Invalid key type");
-	  k.modelFamilies.forEach((f) => {
-		incrementGenericFamilyStats(f);
-		if ('isOverQuota' in k) {
-		  addToFamily(`${f}__overQuota`, k.isOverQuota ? 1 : 0);
-		}
-		// Добавляем подсчет бесплатных ключей
-		if ('isFreeTier' in k) {
-		  addToFamily(`${f}__trial`, k.isFreeTier ? 1 : 0);
-		}
-	  });
-	  break;
     case "cohere":
       if (!keyIsCohereKey(k)) throw new Error("Invalid key type");
       k.modelFamilies.forEach((f) => {
@@ -638,6 +623,13 @@ function addKeyToAggregates(k: KeyPoolKey) {
       break;
     case "qwen":
       k.modelFamilies.forEach(incrementGenericFamilyStats);
+      break;
+    case "glm":
+      if (!keyIsGlmKey(k)) throw new Error("Invalid key type");
+      k.modelFamilies.forEach((f) => {
+        incrementGenericFamilyStats(f);
+        addToFamily(`${f}__overQuota`, k.isOverQuota ? 1 : 0);
+      });
       break;
     case "moonshot":
       k.modelFamilies.forEach(incrementGenericFamilyStats);
@@ -752,10 +744,6 @@ function getInfoForFamily(family: ModelFamily): BaseFamilyInfo {
       case "xai":
         info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
         break;
-		case "openrouter":
-        info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
-		info.trialKeys = familyStats.get(`${family}__trial`) || 0; // Добавлено
-        break;
       case "cohere":
         info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
         break;
@@ -763,6 +751,9 @@ function getInfoForFamily(family: ModelFamily): BaseFamilyInfo {
         info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
         break;
       case "qwen":
+        info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
+        break;
+      case "glm":
         info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
         break;
       case "moonshot":

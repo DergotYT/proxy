@@ -22,6 +22,15 @@ let nativeModelsCacheTime = 0;
 // https://ai.google.dev/models/gemini
 // TODO: list models https://ai.google.dev/tutorials/rest_quickstart#list_models
 
+/**
+ * Detects if a Google AI model is an image generation model
+ */
+function isGoogleAIImageModel(model: string): boolean {
+  // Only specific models are image generation models, not all flash models
+  return model.includes("-image") || 
+         model.includes("imagen");
+}
+
 const getModelsResponse = () => {
   if (new Date().getTime() - modelsCacheTime < 1000 * 60) {
     return modelsCache;
@@ -129,6 +138,12 @@ function transformGoogleAIResponse(
   req: Request
 ): Record<string, any> {
   const totalTokens = (req.promptTokens ?? 0) + (req.outputTokens ?? 0);
+  const model = req.body.model;
+  
+  // Check if this is an image generation model
+  if (isGoogleAIImageModel(model)) {
+    return transformGoogleAIImageResponse(resBody, req);
+  }
   
   // Handle the case where content might have different structures
   let content = "";
@@ -173,6 +188,75 @@ function transformGoogleAIResponse(
   };
 }
 
+/**
+ * Transforms Google AI image generation response to OpenAI chat completion format
+ */
+function transformGoogleAIImageResponse(
+  resBody: Record<string, any>,
+  req: Request
+): Record<string, any> {
+  const totalTokens = (req.promptTokens ?? 0) + (req.outputTokens ?? 0);
+  const model = req.body.model;
+  
+  // Extract the prompt from the request
+  const prompt = req.body.contents?.[0]?.parts?.find((part: any) => part.text)?.text || "Generated image";
+  
+  let content = "";
+  
+  // Check if the response has image data
+  if (resBody.candidates && resBody.candidates[0]) {
+    const candidate = resBody.candidates[0];
+    
+    // Look for image data in the response
+    if (candidate.content?.parts) {
+      const imageParts = candidate.content.parts.filter((part: any) => part.inline_data || part.data);
+      
+      if (imageParts.length > 0) {
+        content = imageParts.map((part: any, index: number) => {
+          const imageData = part.inline_data?.data || part.data;
+          const mimeType = part.inline_data?.mime_type || "image/png";
+          
+          if (imageData) {
+            // Convert mime type to file extension for data URL
+            const format = mimeType.split('/')[1] || 'png';
+            return `![Generated image ${index + 1}](data:${mimeType};base64,${imageData})`;
+          }
+          return "";
+        }).filter(Boolean).join("\n\n");
+      }
+    }
+    
+    // Fallback: check for direct data field (as shown in Google's examples)
+    if (!content && resBody.data) {
+      content = `![${prompt}](data:image/png;base64,${resBody.data})`;
+    }
+  }
+  
+  // If no image content found, return error
+  if (!content) {
+    content = "Error: No image data found in response";
+  }
+  
+  return {
+    id: "goo-img-" + v4(),
+    object: "chat.completion",
+    created: Date.now(),
+    model: model,
+    usage: {
+      prompt_tokens: req.promptTokens || 0,
+      completion_tokens: req.outputTokens || 0,
+      total_tokens: totalTokens,
+    },
+    choices: [
+      {
+        message: { role: "assistant", content },
+        finish_reason: resBody.candidates?.[0]?.finishReason || "stop",
+        index: 0,
+      },
+    ],
+  };
+}
+
 const googleAIProxy = createQueuedProxyMiddleware({
   target: ({ signedRequest }: { signedRequest: any }) => {
     if (!signedRequest) throw new Error("Must sign request before proxying");
@@ -186,6 +270,39 @@ const googleAIProxy = createQueuedProxyMiddleware({
 const googleAIRouter = Router();
 googleAIRouter.get("/v1/models", handleModelRequest);
 googleAIRouter.get("/:apiVersion(v1alpha|v1beta)/models", handleNativeModelRequest);
+
+/**
+ * Removes incompatible generationConfig parameters for image generation models
+ */
+function removeSafetySettingsForImageModels(req: Request) {
+  const model = req.body.model;
+  req.log.info({ model, isImageModel: isGoogleAIImageModel(model), hasGenerationConfig: !!req.body.generationConfig }, "Checking generationConfig for image models");
+  
+  if (model && isGoogleAIImageModel(model)) {
+    // Only modify generationConfig parameters - let frontend handle safety settings
+    if (req.body.generationConfig) {
+      const originalConfig = { ...req.body.generationConfig };
+      
+      // Remove parameters that are incompatible with image models
+      const disallowedParams = ['frequencyPenalty','presencePenalty'];
+      const newConfig = { ...originalConfig };
+      
+      for (const param of disallowedParams) {
+        if (newConfig[param] !== undefined) {
+          delete newConfig[param];
+        }
+      }
+      
+      req.body.generationConfig = Object.keys(newConfig).length > 0 ? newConfig : undefined;
+      
+      req.log.info({ 
+        model, 
+        originalConfig, 
+        newConfig: req.body.generationConfig 
+      }, "Modified generationConfig for image generation model");
+    }
+  }
+}
 
 /**
  * Processes the thinking budget for Gemini 2.5 Flash model.
@@ -274,7 +391,7 @@ googleAIRouter.post(
     { inApi: "google-ai", outApi: "google-ai", service: "google-ai" },
     { 
       beforeTransform: [maybeReassignModel], 
-      afterTransform: [checkAndBlockExperimentalModels, setStreamFlag, processThinkingBudget] 
+      afterTransform: [checkAndBlockExperimentalModels, setStreamFlag, processThinkingBudget, removeSafetySettingsForImageModels] 
     }
   ),
   googleAIProxy
@@ -287,7 +404,7 @@ googleAIRouter.post(
   createPreprocessorMiddleware(
     { inApi: "openai", outApi: "google-ai", service: "google-ai" },
     { 
-      afterTransform: [maybeReassignModel, checkAndBlockExperimentalModels, processThinkingBudget] 
+      afterTransform: [maybeReassignModel, checkAndBlockExperimentalModels, processThinkingBudget, removeSafetySettingsForImageModels] 
     }
   ),
   googleAIProxy

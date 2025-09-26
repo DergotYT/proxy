@@ -12,9 +12,9 @@ import { openai } from "./openai";
 import { openaiImage } from "./openai-image";
 import { deepseek } from "./deepseek";
 import { xai } from "./xai";
-import { openrouter } from "./openrouter";
 import { cohere } from "./cohere";
 import { qwen } from "./qwen";
+import { glm } from "./glm";
 import { moonshot } from "./moonshot";
 import { sendErrorToClient } from "./middleware/response/error-generator";
 
@@ -57,9 +57,9 @@ proxyRouter.use("/gcp/claude", addV1, gcp);
 proxyRouter.use("/azure/openai", addV1, azure);
 proxyRouter.use("/deepseek", addV1, deepseek);
 proxyRouter.use("/xai", addV1, xai);
-proxyRouter.use("/openrouter", addV1, openrouter);
 proxyRouter.use("/cohere", addV1, cohere);
 proxyRouter.use("/qwen", addV1, qwen);
+proxyRouter.use("/glm", addV1, glm);
 proxyRouter.use("/moonshot", addV1, moonshot);
 
 // Redirect browser requests to the homepage.

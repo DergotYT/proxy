@@ -250,11 +250,11 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
       case "deepseek":
         await handleDeepseekBadRequestError(req, errorPayload);
         break;
+      case "glm":
+        await handleGlmBadRequestError(req, errorPayload);
+        break;
         case "xai":
           await handleXaiBadRequestError(req, errorPayload);
-          break;
-		  case "openrouter":
-          await handleOpenrouterBadRequestError(req, errorPayload);
           break;
       case "anthropic":
       case "aws":
@@ -268,7 +268,7 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
         errorPayload.proxy_note = `The upstream Cohere API rejected the request. Check the error message for details.`;
         break;
       case "qwen":
-        // No special handling yet
+        await handleQwenBadRequestError(req, errorPayload);
         break;
       case "moonshot":
         errorPayload.proxy_note = `The Moonshot API rejected the request. Check the error message for details.`;
@@ -282,55 +282,35 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
     await reenqueueRequest(req);
     throw new RetryableError(`${service} key authentication failed, retrying with different key.`);
   } else if (statusCode === 402) {
-	  // OpenRouter specific - insufficient credits
-	if (service === "openrouter") {
-	 const errorMessage = errorPayload.error?.message || '';
-		// Проверяем тип ошибки 402
-		if (errorMessage.includes("Insufficient credits") || 
-			errorMessage.includes("requires more credits")) {
-		  // Это ошибка недостатка кредитов - не отключаем ключ, просто показываем ошибку
-			errorPayload.proxy_note = `OpenRouter: ${errorMessage}`;
-		} else {
-			// Другие ошибки 402 - отключаем ключ
-			keyPool.disable(req.key!, "quota");
-			await reenqueueRequest(req);
-			throw new RetryableError("Openrouter key has insufficient balance, retrying with different key.");
-		}
-	}
-	  // Deepseek specific - insufficient balance
-	  if (service === "deepseek") {
-		keyPool.disable(req.key!, "quota");
-		await reenqueueRequest(req);
-		throw new RetryableError("Deepseek key has insufficient balance, retrying with different key.");
-	  }
-	} else if (statusCode === 403) {
-	  switch (service) {
-	    case "xai":
-			await reenqueueRequest(req);
-			throw new RetryableError("XAI key lacks permissions, retrying with different key.");
-
-		case "anthropic":
-		  if (
-			errorType === "permission_error" &&
-			errorPayload.error?.message?.toLowerCase().includes("multimodal")
-		  ) {
-			keyPool.update(req.key!, { allowsMultimodality: false });
-			await reenqueueRequest(req);
-			throw new RetryableError(
-			  "Claude request re-enqueued because key does not support multimodality."
-			);
-		  } else {
-			// Проверяем, является ли это ошибкой модерации OpenRouter
-			const errorMessage = errorPayload.error?.message || '';
-			if (errorMessage.includes("moderation") || errorMessage.includes("flagged")) {
-			  // Ошибка модерации - не отключаем ключ
-			  errorPayload.proxy_note = `OpenRouter moderation error: ${errorMessage}`;
-			} else {
-			  keyPool.disable(req.key!, "revoked");
-			  errorPayload.proxy_note = `Assigned API key is invalid or revoked, please try again.`;
-			}
-		  }
-		  return;
+    // Deepseek specific - insufficient balance
+    if (service === "deepseek") {
+      keyPool.disable(req.key!, "quota");
+      await reenqueueRequest(req);
+      throw new RetryableError("Deepseek key has insufficient balance, retrying with different key.");
+    }
+  } else if (statusCode === 405) {
+    // Xai specific - method not allowed, treat as retryable
+    if (service === "xai") {
+      await reenqueueRequest(req);
+      throw new RetryableError("XAI key method not allowed, retrying with different key.");
+    }
+  } else if (statusCode === 403) {
+    switch (service) {
+      case "anthropic":
+        if (
+          errorType === "permission_error" &&
+          errorPayload.error?.message?.toLowerCase().includes("multimodal")
+        ) {
+          keyPool.update(req.key!, { allowsMultimodality: false });
+          await reenqueueRequest(req);
+          throw new RetryableError(
+            "Claude request re-enqueued because key does not support multimodality."
+          );
+        } else {
+          keyPool.disable(req.key!, "revoked");
+          errorPayload.proxy_note = `Assigned API key is invalid or revoked, please try again.`;
+        }
+        return;
       case "aws":
         switch (errorType) {
           case "UnrecognizedClientException":
@@ -355,19 +335,6 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
             errorPayload.proxy_note = `Received 403 error. Key may be invalid.`;
         }
         return;
-	  case "openrouter":
-		// Проверяем, является ли это ошибкой модерации
-		const errorMessage = errorPayload.error?.message || '';
-		if (errorMessage.includes("moderation") || errorMessage.includes("flagged")) {
-        // Ошибка модерации - не отключаем ключ
-			errorPayload.proxy_note = `OpenRouter moderation error: ${errorMessage}`;
-		} else {
-			// Другие ошибки 403 - отключаем ключ
-			keyPool.disable(req.key!, "revoked");
-			await reenqueueRequest(req);
-			throw new RetryableError("Openrouter key is invalid, retrying with different key.");
-		}
-		break;
       case "mistral-ai":
       case "gcp":
         keyPool.disable(req.key!, "revoked");
@@ -377,6 +344,9 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
         keyPool.disable(req.key!, "revoked");
         await reenqueueRequest(req);
         throw new RetryableError("Moonshot key is invalid, retrying with different key.");
+      case "xai":
+        await reenqueueRequest(req);
+        throw new RetryableError("XAI key lacks permissions, retrying with different key.");
     }
   } else if (statusCode === 429) {
     switch (service) {
@@ -402,32 +372,26 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
       case "deepseek":
         await handleDeepseekRateLimitError(req, errorPayload);
         break;
-      case "xai":
-        await handleXaiRateLimitError(req, errorPayload);
+      case "glm":
+        await handleGlmRateLimitError(req, errorPayload);
         break;
-	  case "openrouter":
-        await handleOpenrouterRateLimitError(req, errorPayload);
-        break;
-      case "cohere":
-        await handleCohereRateLimitError(req, errorPayload);
-        break;
-      case "qwen":
-        // Similar handling to OpenAI for rate limits
-        await handleOpenAIRateLimitError(req, errorPayload);
-        break;
-      case "moonshot":
-        await handleMoonshotRateLimitError(req, errorPayload);
-        break;
+        case "xai":
+          await handleXaiRateLimitError(req, errorPayload);
+          break;
+        case "cohere":
+          await handleCohereRateLimitError(req, errorPayload);
+          break;
+        case "qwen":
+          await handleQwenRateLimitError(req, errorPayload);
+          break;
+        case "moonshot":
+          await handleMoonshotRateLimitError(req, errorPayload);
+          break;
       default:
         assertNever(service as never);
-  }} else if (statusCode === 405) {
-		// Xai specific - method not allowed, treat as retryable
-		if (service === "xai") {
-		await reenqueueRequest(req);
-			throw new RetryableError("XAI key method not allowed, retrying with different key.");
-		}
+    }
   } else if (statusCode === 404) {
-    // Most likely model not found
+    // Most likely model not found, but for xAI treat as retryable
     switch (service) {
       case "openai":
         if (errorType === "model_not_found") {
@@ -443,7 +407,6 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
       case "xai":
         await reenqueueRequest(req);
         throw new RetryableError("XAI API returned 404, retrying with different key.");
-
       case "anthropic":
       case "google-ai":
       case "mistral-ai":
@@ -451,13 +414,23 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
       case "gcp":
       case "azure":
       case "deepseek":
-      case "openrouter":
+      case "glm":
       case "cohere":
       case "qwen":
         errorPayload.proxy_note = `The key assigned to your prompt does not support the requested model.`;
         break;
       default:
         assertNever(service as never);
+    }
+    
+  } else if (statusCode === 500) {
+    switch (service) {
+      case "qwen":
+        await handleQwenServerError(req, errorPayload);
+        break;
+      default:
+        errorPayload.proxy_note = `Internal server error from upstream service.`;
+        break;
     }
   } else if (statusCode === 503) {
     switch (service) {
@@ -471,6 +444,9 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
         throw new RetryableError(
           "AWS Bedrock service unavailable (503), re-enqueued request."
         );
+      case "qwen":
+        await handleQwenServerOverloadError(req, errorPayload);
+        break;
       default:
         errorPayload.proxy_note = `Upstream service unavailable. Try again later.`;
         break;
@@ -604,11 +580,48 @@ async function handleDeepseekRateLimitError(
 }
 
 async function handleDeepseekBadRequestError(
-  req: Request, 
+  req: Request,
   errorPayload: ProxiedErrorPayload
 ) {
   // Based on the checker code, a 400 response means the key is valid but there was some other error
   errorPayload.proxy_note = `The API rejected the request. Check the error message for details.`;
+}
+
+async function handleGlmBadRequestError(
+  req: Request,
+  errorPayload: ProxiedErrorPayload
+) {
+  // GLM 400 - Bad Request - similar to DeepSeek handling
+  errorPayload.proxy_note = `The GLM API rejected the request. Check the error message for details.`;
+}
+
+async function handleGlmRateLimitError(
+  req: Request,
+  errorPayload: ProxiedErrorPayload
+) {
+  const error = errorPayload.error || {};
+  const message = error.message || errorPayload.message || "";
+  
+  // Check if it's a quota/billing issue vs rate limiting
+  if (message.includes("quota") || message.includes("billing") || message.includes("exceeded your current quota") || message.includes("balance")) {
+    // 429 - Quota exceeded - disable key
+    req.log.warn(
+      { key: req.key?.hash, message },
+      "GLM key has exceeded quota and will be disabled"
+    );
+    keyPool.disable(req.key!, "quota");
+    await reenqueueRequest(req);
+    throw new RetryableError("GLM key quota exceeded, retrying with different key.");
+  } else {
+    // 429 - Rate limit reached - temporary, mark as rate limited and retry
+    req.log.debug(
+      { key: req.key?.hash, message },
+      "GLM key rate limited, will retry"
+    );
+    keyPool.markRateLimited(req.key!);
+    await reenqueueRequest(req);
+    throw new RetryableError("GLM rate-limited request re-enqueued.");
+  }
 }
 
 async function handleXaiRateLimitError(
@@ -619,23 +632,8 @@ async function handleXaiRateLimitError(
   await reenqueueRequest(req);
   throw new RetryableError("Xai rate-limited request re-enqueued.");
 }
-async function handleOpenrouterRateLimitError(
-  req: Request,
-  errorPayload: ProxiedErrorPayload
-) {
-  keyPool.markRateLimited(req.key!);
-  await reenqueueRequest(req);
-  throw new RetryableError("Xai rate-limited request re-enqueued.");
-}
 
 async function handleXaiBadRequestError(
-  req: Request, 
-  errorPayload: ProxiedErrorPayload
-) {
-  // Based on the checker code, a 400 response means the key is valid but there was some other error
-  errorPayload.proxy_note = `The API rejected the request. Check the error message for details.`;
-}
-async function handleOpenrouterBadRequestError(
   req: Request, 
   errorPayload: ProxiedErrorPayload
 ) {
@@ -962,6 +960,98 @@ async function handleGoogleAIRateLimitError(
   }
 }
 
+async function handleQwenBadRequestError(
+  req: Request,
+  errorPayload: ProxiedErrorPayload
+) {
+  // Qwen 400 - Bad Request - treat as invalid key
+  req.log.warn(
+    { key: req.key?.hash, error: errorPayload },
+    "Qwen API returned 400 error, marking key as invalid"
+  );
+  
+  // Mark the key as invalid and retry with a different key
+  await reenqueueRequest(req);
+  throw new RetryableError("Qwen key invalid due to 400 error, retrying with different key.");
+}
+
+async function handleQwenRateLimitError(
+  req: Request,
+  errorPayload: ProxiedErrorPayload
+) {
+  const error = errorPayload.error || {};
+  const message = error.message || errorPayload.message || "";
+  
+  // Check if it's a quota/billing issue vs rate limiting
+  if (message.includes("quota") || message.includes("billing") || message.includes("exceeded your current quota")) {
+    // 429 - Quota exceeded - disable key
+    req.log.warn(
+      { key: req.key?.hash, message },
+      "Qwen key has exceeded quota and will be disabled"
+    );
+    keyPool.disable(req.key!, "quota");
+    await reenqueueRequest(req);
+    throw new RetryableError("Qwen key quota exceeded, retrying with different key.");
+  } else {
+    // 429 - Rate limit reached - temporary, mark as rate limited and retry
+    req.log.debug(
+      { key: req.key?.hash, message },
+      "Qwen key rate limited, will retry"
+    );
+    keyPool.markRateLimited(req.key!);
+    await reenqueueRequest(req);
+    throw new RetryableError("Qwen rate-limited request re-enqueued.");
+  }
+}
+
+async function handleQwenServerError(
+  req: Request,
+  errorPayload: ProxiedErrorPayload
+) {
+  // Qwen 500 - Server error, retry automatically
+  req.retryCount = (req.retryCount || 0) + 1;
+  
+  if (req.retryCount <= 3) {
+    req.log.warn(
+      { key: req.key?.hash, attempt: req.retryCount, errorPayload },
+      `Qwen server error (500). Re-enqueueing request (attempt ${req.retryCount}/3).`
+    );
+    
+    // Add exponential backoff delay
+    const delayMs = Math.min(1000 * Math.pow(2, req.retryCount - 1), 10000);
+    await new Promise(resolve => setTimeout(resolve, delayMs));
+    
+    await reenqueueRequest(req);
+    throw new RetryableError(`Qwen server error, retrying (attempt ${req.retryCount}/3).`);
+  } else {
+    errorPayload.proxy_note = `Qwen server is experiencing issues after 3 retry attempts. Please try again later.`;
+  }
+}
+
+async function handleQwenServerOverloadError(
+  req: Request,
+  errorPayload: ProxiedErrorPayload
+) {
+  // Qwen 503 - Server overloaded, retry with backoff
+  req.retryCount = (req.retryCount || 0) + 1;
+  
+  if (req.retryCount <= 5) {
+    req.log.warn(
+      { key: req.key?.hash, attempt: req.retryCount, errorPayload },
+      `Qwen server overloaded (503). Re-enqueueing request (attempt ${req.retryCount}/5).`
+    );
+    
+    // Longer exponential backoff for server overload
+    const delayMs = Math.min(2000 * Math.pow(2, req.retryCount - 1), 30000);
+    await new Promise(resolve => setTimeout(resolve, delayMs));
+    
+    await reenqueueRequest(req);
+    throw new RetryableError(`Qwen server overloaded, retrying (attempt ${req.retryCount}/5).`);
+  } else {
+    errorPayload.proxy_note = `Qwen servers are currently overloaded after 5 retry attempts. Please try again later.`;
+  }
+}
+
 const incrementUsage: ProxyResHandlerWithBody = async (_proxyRes, req) => {
   if (isTextGenerationRequest(req) || isImageGenerationRequest(req)) {
     const model = req.body.model;
@@ -1007,7 +1097,7 @@ const countResponseTokens: ProxyResHandlerWithBody = async (
     const completion = getCompletionFromBody(req, body);
     const tokens = await countTokens({ req, completion, service });
     
-    if (req.service === "openai" || req.service === "azure" || req.service === "deepseek" || req.service === "cohere" || req.service === "qwen") {
+    if (req.service === "openai" || req.service === "azure" || req.service === "deepseek" || req.service === "glm" || req.service === "cohere" || req.service === "qwen") {
       // O1 consumes (a significant amount of) invisible tokens for the chain-
       // of-thought reasoning. We have no way to count these other than to check
       // the response body.

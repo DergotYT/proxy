@@ -16,6 +16,7 @@ export { transformOutboundPayload } from "./preprocessors/transform-outbound-pay
 export { validateContextSize } from "./preprocessors/validate-context-size";
 export { validateModelFamily } from "./preprocessors/validate-model-family";
 export { validateVision } from "./preprocessors/validate-vision";
+export { extractQwenExtraBody } from "./preprocessors/extract-qwen-extra-body";
 
 // Proxy request mutators (runs every time request is dequeued, before proxying, usually for auth/signing)
 export { addKey, addKeyForEmbeddingsRequest } from "./mutators/add-key";
