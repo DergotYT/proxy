@@ -1,5 +1,3 @@
-// src/service-info.ts
-
 import { config, listConfig } from "./config";
 import {
   AnthropicKey,
@@ -237,7 +235,7 @@ export type ServiceInfo = {
     azure?: string;
     "openai-image"?: string;
     "azure-image"?: string;
-    "openrouter"?: string; // <--- ADDED
+    "openrouter"?: string;
   };
   proompts?: number;
   tookens?: string;
@@ -257,7 +255,8 @@ export type ServiceInfo = {
   & { [f in QwenModelFamily]?: BaseFamilyInfo }
   & { [f in GlmModelFamily]?: BaseFamilyInfo }
   & { [f in MoonshotModelFamily]?: BaseFamilyInfo }
-  & { [f in OpenRouterModuleFamily]?: OpenRouterInfo }; // <--- ИСПРАВЛЕНО: Убран лишний ';'
+  & { [f in OpenRouterModuleFamily]?: OpenRouterInfo };
+
 
 // https://stackoverflow.com/a/66661477
 // type DeepKeyOf<T> = (
@@ -516,7 +515,7 @@ function addKeyToAggregates(k: KeyPoolKey) {
       addToFamily(`${f}__legacyTokens`, familyLegacyTokens); // Optional
     }
     addToFamily(`${f}__revoked`, k.isRevoked ? 1 : 0);
-    addToFamily(`${f}__active`, k.isDisabled ? 0 : 1);
+    // addToFamily(`${f}__active`, k.isDisabled ? 0 : 1); // <-- Удален универсальный подсчет
   };
 
   switch (k.service) {
@@ -525,6 +524,7 @@ function addKeyToAggregates(k: KeyPoolKey) {
       addToService("openai__uncheckedKeys", Boolean(k.lastChecked) ? 0 : 1);
       k.modelFamilies.forEach((f) => {
         incrementGenericFamilyStats(f);
+        addToFamily(`${f}__active`, k.isDisabled ? 0 : 1);
         addToFamily(`${f}__trial`, k.isTrial ? 1 : 0);
         addToFamily(`${f}__overQuota`, k.isOverQuota ? 1 : 0);
       });
@@ -534,6 +534,7 @@ function addKeyToAggregates(k: KeyPoolKey) {
       addToService("anthropic__uncheckedKeys", Boolean(k.lastChecked) ? 0 : 1);
       k.modelFamilies.forEach((f) => {
         incrementGenericFamilyStats(f);
+        addToFamily(`${f}__active`, k.isDisabled ? 0 : 1);
         addToFamily(`${f}__trial`, k.tier === "free" ? 1 : 0);
         addToFamily(`${f}__overQuota`, k.isOverQuota ? 1 : 0);
         addToFamily(`${f}__pozzed`, k.isPozzed ? 1 : 0);
@@ -542,7 +543,10 @@ function addKeyToAggregates(k: KeyPoolKey) {
 
     case "aws": {
       if (!keyIsAwsKey(k)) throw new Error("Invalid key type");
-      k.modelFamilies.forEach(incrementGenericFamilyStats);
+      k.modelFamilies.forEach(f => {
+        incrementGenericFamilyStats(f);
+        addToFamily(`${f}__active`, k.isDisabled ? 0 : 1);
+      });
       if (!k.isDisabled) {
         // Don't add revoked keys to available AWS variants
         k.modelIds.forEach((id) => {
@@ -577,13 +581,17 @@ function addKeyToAggregates(k: KeyPoolKey) {
     }
     case "gcp":
       if (!keyIsGcpKey(k)) throw new Error("Invalid key type");
-      k.modelFamilies.forEach(incrementGenericFamilyStats);
+      k.modelFamilies.forEach(f => {
+        incrementGenericFamilyStats(f);
+        addToFamily(`${f}__active`, k.isDisabled ? 0 : 1);
+      });
       // TODO: add modelIds to GcpKey
       break;
     case "deepseek":
       if (!keyIsDeepseekKey(k)) throw new Error("Invalid key type");
       k.modelFamilies.forEach((f) => {
         incrementGenericFamilyStats(f);
+        addToFamily(`${f}__active`, k.isDisabled ? 0 : 1);
         addToFamily(`${f}__overQuota`, k.isOverQuota ? 1 : 0);
       });
       break;
@@ -591,6 +599,7 @@ function addKeyToAggregates(k: KeyPoolKey) {
       if (!keyIsXaiKey(k)) throw new Error("Invalid key type");
       k.modelFamilies.forEach((f) => {
         incrementGenericFamilyStats(f);
+        addToFamily(`${f}__active`, k.isDisabled ? 0 : 1);
         if ('isOverQuota' in k) {
           addToFamily(`${f}__overQuota`, k.isOverQuota ? 1 : 0);
         }
@@ -600,6 +609,7 @@ function addKeyToAggregates(k: KeyPoolKey) {
       if (!keyIsCohereKey(k)) throw new Error("Invalid key type");
       k.modelFamilies.forEach((f) => {
         incrementGenericFamilyStats(f);
+        addToFamily(`${f}__active`, k.isDisabled ? 0 : 1);
         if ('isOverQuota' in k) {
           addToFamily(`${f}__overQuota`, k.isOverQuota ? 1 : 0);
         }
@@ -608,7 +618,10 @@ function addKeyToAggregates(k: KeyPoolKey) {
     // These services don't have any additional stats to track.
     case "azure":
     case "mistral-ai":
-      k.modelFamilies.forEach(incrementGenericFamilyStats);
+      k.modelFamilies.forEach(f => {
+        incrementGenericFamilyStats(f);
+        addToFamily(`${f}__active`, k.isDisabled ? 0 : 1);
+      });
       break;
     case "google-ai":
       // Cast to GoogleAIKey to access GoogleAI-specific properties
@@ -617,6 +630,7 @@ function addKeyToAggregates(k: KeyPoolKey) {
       // First handle general stats for all model families
       k.modelFamilies.forEach((f) => {
         incrementGenericFamilyStats(f);
+        addToFamily(`${f}__active`, k.isDisabled ? 0 : 1);
       });
       
       // Create a set of model families that are over quota for this key
@@ -644,47 +658,52 @@ function addKeyToAggregates(k: KeyPoolKey) {
       });
       break;
     case "qwen":
-      k.modelFamilies.forEach(incrementGenericFamilyStats);
+      k.modelFamilies.forEach(f => {
+        incrementGenericFamilyStats(f);
+        addToFamily(`${f}__active`, k.isDisabled ? 0 : 1);
+      });
       break;
     case "glm":
       if (!keyIsGlmKey(k)) throw new Error("Invalid key type");
       k.modelFamilies.forEach((f) => {
         incrementGenericFamilyStats(f);
+        addToFamily(`${f}__active`, k.isDisabled ? 0 : 1);
         addToFamily(`${f}__overQuota`, k.isOverQuota ? 1 : 0);
       });
       break;
     case "moonshot":
-      k.modelFamilies.forEach(incrementGenericFamilyStats);
+      k.modelFamilies.forEach(f => {
+        incrementGenericFamilyStats(f);
+        addToFamily(`${f}__active`, k.isDisabled ? 0 : 1);
+      });
       break;
-  case "openrouter":
-    if (!keyIsOpenRouterKey(k)) throw new Error("Invalid key type");
-    addToService("openrouter__uncheckedKeys", Boolean(k.lastChecked) ? 0 : 1);
+    case "openrouter":
+      if (!keyIsOpenRouterKey(k)) throw new Error("Invalid key type");
+      addToService("openrouter__uncheckedKeys", Boolean(k.lastChecked) ? 0 : 1);
 
-    const isPaidActive = k.isPaid && !k.isOverQuota; // PAID (Balance/Pay-as-you-go)
-    const isFreeActive = k.status === 'FREE (Active)'; // FREE (Active)
+      const isPaidActive = k.isPaid && !k.isOverQuota && !k.isDisabled; // PAID (Balance/Pay-as-you-go)
+      const isFreeActive = k.status === 'FREE (Active)' && !k.isDisabled; // FREE (Active)
 
-    k.modelFamilies.forEach((f) => {
-      incrementGenericFamilyStats(f);
-      addToFamily(`${f}__overQuota`, k.isOverQuota ? 1 : 0);
-
-      // ВАЖНОЕ ИЗМЕНЕНИЕ: Переопределяем, какие ключи считать 'active' для OR Paid/Free
-      if (f === 'openrouter-paid') {
-        if (isPaidActive) {
-           addToFamily(`${f}__active`, 1); // <--- ТОЛЬКО ОПЛАЧЕННЫЕ И РАБОЧИЕ
-           addToFamily(`${f}__paidKeys`, 1); // (сохраняем для детализации)
+      k.modelFamilies.forEach((f) => {
+        incrementGenericFamilyStats(f);
+        
+        // --- СПЕЦИАЛЬНАЯ ЛОГИКА ДЛЯ OPENROUTER ---
+        if (f === 'openrouter-paid') {
+           // activeKeys = 1, только если ключ Paid и может быть использован для платных моделей
+           addToFamily(`${f}__active`, isPaidActive ? 1 : 0); 
+           addToFamily(`${f}__paidKeys`, isPaidActive ? 1 : 0); 
+           addToFamily(`${f}__overQuota`, k.isPaid && k.isOverQuota ? 1 : 0); // PAID Over Quota
+        } else if (f === 'openrouter-free') {
+           // activeKeys = 1, только если ключ Free и активен (т.е. не Exhausted)
+           addToFamily(`${f}__active`, isFreeActive ? 1 : 0); 
+           addToFamily(`${f}__freeActiveKeys`, isFreeActive ? 1 : 0); 
+           addToFamily(`${f}__overQuota`, k.isFreeTier && k.isOverQuota ? 1 : 0); // FREE Exhausted
         } else {
-           addToFamily(`${f}__active`, 0); // Обнуляем для нерабочих/бесплатных ключей
+             // Fallback for other families if somehow included in OR keys
+             addToFamily(`${f}__active`, k.isDisabled ? 0 : 1);
         }
-      } else if (f === 'openrouter-free') {
-        if (isFreeActive) {
-           addToFamily(`${f}__active`, 1); // <--- ТОЛЬКО АКТИВНЫЕ БЕСПЛАТНЫЕ
-           addToFamily(`${f}__freeActiveKeys`, 1); // (сохраняем для детализации)
-        } else {
-           addToFamily(`${f}__active`, 0); // Обнуляем для нерабочих/платных ключей
-        }
-      }
-    });
-    break;
+      });
+      break;
     default:
       assertNever(k.service);
   }
@@ -721,7 +740,7 @@ function getInfoForFamily(family: ModelFamily): BaseFamilyInfo {
   
   let info: BaseFamilyInfo & OpenAIInfo & AnthropicInfo & AwsInfo & GcpInfo & OpenRouterInfo = {
     usage: usageString,
-    activeKeys: familyStats.get(`${family}__active`) || 0, // <--- БЕРЕМ ИЗ ПЕРЕОПРЕДЕЛЕННОГО АГРЕГАТА
+    activeKeys: familyStats.get(`${family}__active`) || 0,
     revokedKeys: familyStats.get(`${family}__revoked`) || 0,
   };
 
@@ -813,10 +832,8 @@ function getInfoForFamily(family: ModelFamily): BaseFamilyInfo {
       case "openrouter":
         info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
         if (family === 'openrouter-paid') {
-          // paidKeys теперь будет показывать то же, что и activeKeys, но оставим для ясности.
           info.paidKeys = familyStats.get(`${family}__paidKeys`) || 0;
         } else if (family === 'openrouter-free') {
-          // freeActiveKeys теперь будет показывать то же, что и activeKeys, но оставим для ясности.
           info.freeActiveKeys = familyStats.get(`${family}__freeActiveKeys`) || 0;
         }
         break;
