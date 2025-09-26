@@ -747,6 +747,7 @@ function getModelFamilyForQuotaUsage(
   if (model.startsWith("kimi")) return "moonshot";
   if (model.startsWith("qwen")) return "qwen";
   if (model.startsWith("glm")) return "glm";
+  if (model.includes("openrouter")) return getOpenRouterModuleFamily(model);
 
   switch (api) {
     case "openai":

@@ -273,11 +273,17 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
       case "moonshot":
         errorPayload.proxy_note = `The Moonshot API rejected the request. Check the error message for details.`;
         break;
+      case "openrouter": // <--- ADDED
+        await handleOpenRouterError(req, errorPayload);
+        break;
       default:
         assertNever(service);
     }
   } else if (statusCode === 401) {
     // Universal 401 handling - authentication failed, retry with different key
+    if (service === "openrouter") { // <--- ADDED to use dedicated handler
+      await handleOpenRouterError(req, errorPayload);
+    } else {
     keyPool.disable(req.key!, "revoked");
     await reenqueueRequest(req);
     throw new RetryableError(`${service} key authentication failed, retrying with different key.`);
@@ -287,6 +293,8 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
       keyPool.disable(req.key!, "quota");
       await reenqueueRequest(req);
       throw new RetryableError("Deepseek key has insufficient balance, retrying with different key.");
+    } else if (service === "openrouter") { // <--- ADDED
+      await handleOpenRouterError(req, errorPayload);
     }
   } else if (statusCode === 405) {
     // Xai specific - method not allowed, treat as retryable
@@ -387,6 +395,9 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
         case "moonshot":
           await handleMoonshotRateLimitError(req, errorPayload);
           break;
+      case "openrouter":
+          await handleOpenRouterError(req, errorPayload);
+          break;
       default:
         assertNever(service as never);
     }
@@ -419,6 +430,9 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
       case "qwen":
         errorPayload.proxy_note = `The key assigned to your prompt does not support the requested model.`;
         break;
+      case "openrouter": // <--- ADDED
+          await handleOpenRouterError(req, errorPayload);
+          break;
       default:
         assertNever(service as never);
     }
@@ -1074,6 +1088,55 @@ const incrementUsage: ProxyResHandlerWithBody = async (_proxyRes, req) => {
     }
   }
 };
+
+
+async function handleOpenRouterError(
+  req: Request,
+  errorPayload: ProxiedErrorPayload
+) {
+  const statusCode = req.key!.service === "openrouter" ? (req.res as any)?.statusCode : undefined;
+  const error = errorPayload.error || {};
+  const message = error.message || errorPayload.message || "";
+  
+  // 400 Bad Request
+  if (statusCode === 400) {
+    if (message.includes("Key limit exceeded")) {
+      // Key limit exceeded is a 400 on OpenRouter, treat as quota exhaustion
+      keyPool.disable(req.key!, "quota");
+      await reenqueueRequest(req);
+      throw new RetryableError("OpenRouter key limit exceeded, retrying with different key.");
+    }
+    errorPayload.proxy_note = `The OpenRouter API rejected the request. Check the error message for details.`;
+  }
+  
+  // 401 Unauthorized
+  if (statusCode === 401) {
+    keyPool.disable(req.key!, "revoked");
+    await reenqueueRequest(req);
+    throw new RetryableError("OpenRouter key authentication failed, retrying with different key.");
+  }
+  
+  // 402 Payment Required
+  if (statusCode === 402) {
+    keyPool.disable(req.key!, "quota");
+    await reenqueueRequest(req);
+    throw new RetryableError("OpenRouter key has insufficient balance/credits, retrying with different key.");
+  }
+  
+  // 404 Not Found (e.g., model not found)
+  if (statusCode === 404) {
+    errorPayload.proxy_note = `The OpenRouter key does not support the requested model or model does not exist.`;
+  }
+  
+  // 429 Too Many Requests
+  if (statusCode === 429) {
+    keyPool.markRateLimited(req.key!);
+    await reenqueueRequest(req);
+    throw new RetryableError("OpenRouter rate-limited request re-enqueued.");
+  }
+}
+
+
 
 const countResponseTokens: ProxyResHandlerWithBody = async (
   _proxyRes,

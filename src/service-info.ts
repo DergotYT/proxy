@@ -118,6 +118,8 @@ const MODEL_FAMILY_ORDER: ModelFamily[] = [
   "cohere",
   "qwen",
   "glm",
+  "openrouter-paid", // <--- ADDED
+  "openrouter-free", // <--- ADDED
   "moonshot"
 ];
 
@@ -140,6 +142,8 @@ const keyIsGlmKey = (k: KeyPoolKey): k is GlmKey =>
   k.service === "glm";
 const keyIsMoonshotKey = (k: KeyPoolKey): k is MoonshotKey =>
   k.service === "moonshot";
+const keyIsOpenRouterKey = (k: KeyPoolKey): k is OpenRouterKey =>
+  k.service === "openrouter";
 
 /** Stats aggregated across all keys for a given service. */
 type ServiceAggregate = "keys" | "uncheckedKeys" | "orgs";
@@ -167,6 +171,8 @@ type ModelAggregates = {
   inputTokens: number; // Changed from tokens
   outputTokens: number; // Added
   legacyTokens?: number; // Added for migrated totals
+  paidKeys?: number; // <--- ADDED
+  freeActiveKeys?: number; // <--- ADDED
 };
 /** All possible combinations of model family and aggregate type. */
 type ModelAggregateKey = `${ModelFamily}__${keyof ModelAggregates}`;
@@ -179,6 +185,12 @@ type AllStats = {
   tokenCost: number;
 } & { [modelFamily in ModelFamily]?: ModelAggregates } & {
   [service in LLMService as `${service}__${ServiceAggregate}`]?: number;
+};
+
+type OpenRouterInfo = BaseFamilyInfo & { // <--- ADDED
+  paidKeys?: number;
+  freeActiveKeys?: number;
+  overQuotaKeys?: number;
 };
 
 type BaseFamilyInfo = {
@@ -240,6 +252,7 @@ export type ServiceInfo = {
   & { [f in QwenModelFamily]?: BaseFamilyInfo }
   & { [f in GlmModelFamily]?: BaseFamilyInfo }
   & { [f in MoonshotModelFamily]?: BaseFamilyInfo };
+  & { [f in OpenRouterModuleFamily]?: OpenRouterInfo };
 
 // https://stackoverflow.com/a/66661477
 // type DeepKeyOf<T> = (
@@ -298,6 +311,9 @@ const SERVICE_ENDPOINTS: { [s in LLMService]: Record<string, string> } = {
   },
   moonshot: {
     moonshot: `%BASE%/moonshot`,
+  },
+  openrouter: { // <--- ADDED
+    openrouter: `%BASE%/openrouter`,
   },
 };
 
@@ -459,6 +475,7 @@ function addKeyToAggregates(k: KeyPoolKey) {
   addToService("qwen__keys", k.service === "qwen" ? 1 : 0);
   addToService("glm__keys", k.service === "glm" ? 1 : 0);
   addToService("moonshot__keys", k.service === "moonshot" ? 1 : 0);
+  addToService("openrouter__keys", k.service === "openrouter" ? 1 : 0);
 
   let sumInputTokens = 0;
   let sumOutputTokens = 0;
@@ -634,6 +651,23 @@ function addKeyToAggregates(k: KeyPoolKey) {
     case "moonshot":
       k.modelFamilies.forEach(incrementGenericFamilyStats);
       break;
+    case "openrouter":
+      if (!keyIsOpenRouterKey(k)) throw new Error("Invalid key type");
+      addToService("openrouter__uncheckedKeys", Boolean(k.lastChecked) ? 0 : 1);
+
+      k.modelFamilies.forEach((f) => {
+        incrementGenericFamilyStats(f);
+        addToFamily(`${f}__overQuota`, k.isOverQuota ? 1 : 0);
+
+        if (f === 'openrouter-paid') {
+          // Count keys that are explicitly 'paid' and active (e.g., PAID (Balance/Pay-as-you-go))
+          if (k.isPaid && !k.isOverQuota) addToFamily(`${f}__paidKeys`, 1);
+        } else if (f === 'openrouter-free') {
+          // Count keys that are 'free' and 'active'
+          if (k.status === 'FREE (Active)') addToFamily(`${f}__freeActiveKeys`, 1);
+        }
+      });
+      break;
     default:
       assertNever(k.service);
   }
@@ -668,7 +702,7 @@ function getInfoForFamily(family: ModelFamily): BaseFamilyInfo {
     usageString = `${prettyTokens(0)} tokens${getCostSuffix(0)}`;
   }
   
-  let info: BaseFamilyInfo & OpenAIInfo & AnthropicInfo & AwsInfo & GcpInfo = {
+  let info: BaseFamilyInfo & OpenAIInfo & AnthropicInfo & AwsInfo & GcpInfo & OpenRouterInfo = {
     usage: usageString,
     activeKeys: familyStats.get(`${family}__active`) || 0,
     revokedKeys: familyStats.get(`${family}__revoked`) || 0,
@@ -758,6 +792,14 @@ function getInfoForFamily(family: ModelFamily): BaseFamilyInfo {
         break;
       case "moonshot":
         info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
+        break;
+      case "openrouter": // <--- ADDED
+        info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
+        if (family === 'openrouter-paid') {
+          info.paidKeys = familyStats.get(`${family}__paidKeys`) || 0;
+        } else if (family === 'openrouter-free') {
+          info.freeActiveKeys = familyStats.get(`${family}__freeActiveKeys`) || 0;
+        }
         break;
     }
   }

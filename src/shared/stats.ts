@@ -73,7 +73,8 @@ const MODEL_PRICING: Record<ModelFamily, { input: number; output: number } | und
   // Adding placeholders for families in models.ts but not yet priced here.
   "cohere": { input: 0.15, output: 0.60 }, // Updated to Command R
   "qwen": { input: 1.60, output: 6.40 }, // Qwen-max based pricing: $1.6 input, $6.4 output per 1M tokens
-  "moonshot": { input: 0.6, output: 2.5 }, // Moonshot kimi k2
+  "openrouter-paid": { input: 5.00, output: 20.00 }, // <--- ADDED: Conservative general price for OpenRouter Paid
+  "openrouter-free": { input: 0.00, output: 0.00 }, // <--- ADDED: Free models have zero cost
 };
 
 export function getTokenCostDetailsUsd(model: ModelFamily, inputTokens: number, outputTokens?: number): { inputCost: number, outputCost: number, totalCost: number } {

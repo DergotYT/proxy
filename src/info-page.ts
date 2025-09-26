@@ -96,6 +96,8 @@ const MODEL_FAMILY_FRIENDLY_NAME: { [f in ModelFamily]: string } = {
   "azure-codex-mini": "Azure Codex Mini",
   "azure-dall-e": "Azure DALL-E",
   "azure-gpt-image": "Azure GPT Image",
+  "openrouter-paid": "OpenRouter Paid Keys", // <--- ADDED
+  "openrouter-free": "OpenRouter Free Models", // <--- ADDED
 };
 
 const converter = new showdown.Converter();
