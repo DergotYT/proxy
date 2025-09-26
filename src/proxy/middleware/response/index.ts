@@ -281,7 +281,7 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
     }
   } else if (statusCode === 401) {
     // Universal 401 handling - authentication failed, retry with different key
-    if (service === "openrouter") { // <--- ADDED to use dedicated handler
+    if (service === "openrouter") {
       await handleOpenRouterError(req, errorPayload);
     } else {
     keyPool.disable(req.key!, "revoked");
@@ -1135,7 +1135,7 @@ async function handleOpenRouterError(
     throw new RetryableError("OpenRouter rate-limited request re-enqueued.");
   }
 }
-
+}
 
 
 const countResponseTokens: ProxyResHandlerWithBody = async (
