@@ -683,6 +683,7 @@ function addKeyToAggregates(k: KeyPoolKey) {
 
       const isPaidActive = k.isPaid && !k.isOverQuota && !k.isDisabled; // PAID (Balance/Pay-as-you-go)
       const isFreeActive = k.status === 'FREE (Active)' && !k.isDisabled; // FREE (Active)
+      const isFreeExhausted = k.status === 'FREE (Exhausted)' && !k.isDisabled; // FREE (Exhausted)
 
       k.modelFamilies.forEach((f) => {
         incrementGenericFamilyStats(f);
@@ -692,12 +693,15 @@ function addKeyToAggregates(k: KeyPoolKey) {
            // activeKeys = 1, только если ключ Paid и может быть использован для платных моделей
            addToFamily(`${f}__active`, isPaidActive ? 1 : 0); 
            addToFamily(`${f}__paidKeys`, isPaidActive ? 1 : 0); 
-           addToFamily(`${f}__overQuota`, k.isPaid && k.isOverQuota ? 1 : 0); // PAID Over Quota
+           // Paid over quota: PAID (No Credits) или PAID (Limit Reached)
+           const isPaidOverQuota = (k.status === 'PAID (No Credits)' || k.status === 'PAID (Limit Reached)') && !k.isDisabled;
+           addToFamily(`${f}__overQuota`, isPaidOverQuota ? 1 : 0);
         } else if (f === 'openrouter-free') {
            // activeKeys = 1, только если ключ Free и активен (т.е. не Exhausted)
            addToFamily(`${f}__active`, isFreeActive ? 1 : 0); 
            addToFamily(`${f}__freeActiveKeys`, isFreeActive ? 1 : 0); 
-           addToFamily(`${f}__overQuota`, k.isFreeTier && k.isOverQuota ? 1 : 0); // FREE Exhausted
+           // Free over quota: FREE (Exhausted)
+           addToFamily(`${f}__overQuota`, isFreeExhausted ? 1 : 0); 
         } else {
              // Fallback for other families if somehow included in OR keys
              addToFamily(`${f}__active`, k.isDisabled ? 0 : 1);
