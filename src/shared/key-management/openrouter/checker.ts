@@ -31,6 +31,9 @@ type ErrorResponse = {
   error: { message: string };
 };
 
+type KeyInfoResult = KeyInfoResponse | ErrorResponse;
+type ModelsResult = ModelsResponse | ErrorResponse;
+
 type UpdateFn = typeof OpenRouterKeyProvider.prototype.update;
 
 export class OpenRouterKeyChecker extends KeyCheckerBase<OpenRouterKey> {
@@ -70,7 +73,7 @@ export class OpenRouterKeyChecker extends KeyCheckerBase<OpenRouterKey> {
     this.updateKey(key.hash, { lastChecked: next });
   }
 
-  private async makeRequest<T>(key: OpenRouterKey, endpoint: string, method: 'GET' | 'POST' = 'GET', data?: any): Promise<{ status: number, data: T | ErrorResponse }> {
+  private async makeRequest<T extends KeyInfoResult | ModelsResult>(key: OpenRouterKey, endpoint: string, method: 'GET' | 'POST' = 'GET', data?: any): Promise<{ status: number, data: T }> {
     const headers = { 'Authorization': `Bearer ${key.key}`, 'Content-Type': 'application/json' };
     const config = { headers };
     
@@ -84,26 +87,28 @@ export class OpenRouterKeyChecker extends KeyCheckerBase<OpenRouterKey> {
       return { status: response.status, data: response.data as T };
     } catch (e: any) {
       const error = e as AxiosError<ErrorResponse>;
+      // This cast assumes the error response body matches ErrorResponse structure
       return { 
         status: error.response?.status || 500, 
-        data: error.response?.data || { error: { message: error.message } } 
+        data: error.response?.data as T || { error: { message: error.message } } as T
       };
     }
   }
   
   private async testKey(key: OpenRouterKey): Promise<{ status: OpenRouterKeyStatus, info: string }> {
-    const { status: keyStatus, data: keyData } = await this.makeRequest<KeyInfoResponse>(key, 'key');
+    const { status: keyStatus, data: keyResult } = await this.makeRequest<KeyInfoResult>(key, 'key');
 
     if (keyStatus === 429) {
       return { status: 'UNKNOWN (Rate Limited)', info: "Could not verify due to rate limits" };
     }
     
-    if (keyStatus !== 200 || !keyData.data) {
-      const errorMsg = (keyData as ErrorResponse).error?.message || 'Invalid response';
+    const keyData = (keyResult as KeyInfoResponse).data; // Cast to access data field only if status is 200/not error
+    if (keyStatus !== 200 || !keyData) {
+      const errorMsg = (keyResult as ErrorResponse).error?.message || 'Invalid response';
       return { status: 'DEAD', info: errorMsg };
     }
     
-    const keyInfo = keyData.data;
+    const keyInfo = keyData;
 
     if (keyInfo.is_free_tier) {
       const usage = keyInfo.usage || 0.0;
@@ -151,15 +156,17 @@ export class OpenRouterKeyChecker extends KeyCheckerBase<OpenRouterKey> {
   }
 
   private async getCheapestPaidModelId(key: OpenRouterKey): Promise<{ id: string | null, price: number }> {
-    const { status, data } = await this.makeRequest<ModelsResponse>(key, 'models');
-    if (status !== 200 || !data.data) {
+    const { status, data: modelResult } = await this.makeRequest<ModelsResult>(key, 'models');
+    
+    const modelData = (modelResult as ModelsResponse).data; // Cast to access data field only if status is 200/not error
+    if (status !== 200 || !modelData) {
         return { id: null, price: Infinity };
     }
     
     let cheapestModelId: string | null = null;
     let minPrice = Infinity;
 
-    for (const model of data.data) {
+    for (const model of modelData) {
         const priceStr = model.pricing?.completion;
         if (priceStr) {
             try {

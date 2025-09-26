@@ -24,6 +24,7 @@ import {
   getGoogleAIModelFamily,
   getMistralAIModelFamily,
   getOpenAIModelFamily,
+  getOpenRouterModuleFamily,
   MODEL_FAMILIES,
   ModelFamily,
 } from "../models";
