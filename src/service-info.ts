@@ -1,3 +1,5 @@
+// src/service-info.ts
+
 import { config, listConfig } from "./config";
 import {
   AnthropicKey,
@@ -11,6 +13,7 @@ import {
   QwenKey,
   GlmKey,
   MoonshotKey,
+  OpenRouterKey,
 } from "./shared/key-management";
 import {
   AnthropicModelFamily,
@@ -31,6 +34,7 @@ import {
   QwenModelFamily,
   GlmModelFamily,
   MoonshotModelFamily,
+  OpenRouterModuleFamily,
 } from "./shared/models";
 import { getCostSuffix, getTokenCostUsd, prettyTokens } from "./shared/stats";
 import { getUniqueIps } from "./proxy/rate-limit";
@@ -118,8 +122,8 @@ const MODEL_FAMILY_ORDER: ModelFamily[] = [
   "cohere",
   "qwen",
   "glm",
-  "openrouter-paid", // <--- ADDED
-  "openrouter-free", // <--- ADDED
+  "openrouter-paid", 
+  "openrouter-free", 
   "moonshot"
 ];
 
@@ -171,8 +175,8 @@ type ModelAggregates = {
   inputTokens: number; // Changed from tokens
   outputTokens: number; // Added
   legacyTokens?: number; // Added for migrated totals
-  paidKeys?: number; // <--- ADDED
-  freeActiveKeys?: number; // <--- ADDED
+  paidKeys?: number; 
+  freeActiveKeys?: number; 
 };
 /** All possible combinations of model family and aggregate type. */
 type ModelAggregateKey = `${ModelFamily}__${keyof ModelAggregates}`;
@@ -187,7 +191,7 @@ type AllStats = {
   [service in LLMService as `${service}__${ServiceAggregate}`]?: number;
 };
 
-type OpenRouterInfo = BaseFamilyInfo & { // <--- ADDED
+type OpenRouterInfo = BaseFamilyInfo & {
   paidKeys?: number;
   freeActiveKeys?: number;
   overQuotaKeys?: number;
@@ -233,6 +237,7 @@ export type ServiceInfo = {
     azure?: string;
     "openai-image"?: string;
     "azure-image"?: string;
+    "openrouter"?: string; // <--- ADDED
   };
   proompts?: number;
   tookens?: string;
@@ -251,8 +256,8 @@ export type ServiceInfo = {
   & { [f in CohereModelFamily]?: BaseFamilyInfo }
   & { [f in QwenModelFamily]?: BaseFamilyInfo }
   & { [f in GlmModelFamily]?: BaseFamilyInfo }
-  & { [f in MoonshotModelFamily]?: BaseFamilyInfo };
-  & { [f in OpenRouterModuleFamily]?: OpenRouterInfo };
+  & { [f in MoonshotModelFamily]?: BaseFamilyInfo }
+  & { [f in OpenRouterModuleFamily]?: OpenRouterInfo }; // <--- ИСПРАВЛЕНО: Убран лишний ';'
 
 // https://stackoverflow.com/a/66661477
 // type DeepKeyOf<T> = (
@@ -312,7 +317,7 @@ const SERVICE_ENDPOINTS: { [s in LLMService]: Record<string, string> } = {
   moonshot: {
     moonshot: `%BASE%/moonshot`,
   },
-  openrouter: { // <--- ADDED
+  openrouter: {
     openrouter: `%BASE%/openrouter`,
   },
 };
@@ -793,7 +798,7 @@ function getInfoForFamily(family: ModelFamily): BaseFamilyInfo {
       case "moonshot":
         info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
         break;
-      case "openrouter": // <--- ADDED
+      case "openrouter":
         info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
         if (family === 'openrouter-paid') {
           info.paidKeys = familyStats.get(`${family}__paidKeys`) || 0;

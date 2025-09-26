@@ -1,3 +1,5 @@
+// src/proxy/middleware/response/index.ts
+
 /* This file is fucking horrendous, sorry */
 // TODO: extract all per-service error response handling into its own modules
 import { Request, Response } from "express";
@@ -273,7 +275,7 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
       case "moonshot":
         errorPayload.proxy_note = `The Moonshot API rejected the request. Check the error message for details.`;
         break;
-      case "openrouter": // <--- ADDED
+      case "openrouter":
         await handleOpenRouterError(req, errorPayload);
         break;
       default:
@@ -287,13 +289,14 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
     keyPool.disable(req.key!, "revoked");
     await reenqueueRequest(req);
     throw new RetryableError(`${service} key authentication failed, retrying with different key.`);
+    } // <--- ИСПРАВЛЕНО: Добавлена закрывающая скобка для else
   } else if (statusCode === 402) {
     // Deepseek specific - insufficient balance
     if (service === "deepseek") {
       keyPool.disable(req.key!, "quota");
       await reenqueueRequest(req);
       throw new RetryableError("Deepseek key has insufficient balance, retrying with different key.");
-    } else if (service === "openrouter") { // <--- ADDED
+    } else if (service === "openrouter") {
       await handleOpenRouterError(req, errorPayload);
     }
   } else if (statusCode === 405) {
@@ -430,7 +433,7 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
       case "qwen":
         errorPayload.proxy_note = `The key assigned to your prompt does not support the requested model.`;
         break;
-      case "openrouter": // <--- ADDED
+      case "openrouter":
           await handleOpenRouterError(req, errorPayload);
           break;
       default:
@@ -1134,7 +1137,6 @@ async function handleOpenRouterError(
     await reenqueueRequest(req);
     throw new RetryableError("OpenRouter rate-limited request re-enqueued.");
   }
-}
 }
 
 
