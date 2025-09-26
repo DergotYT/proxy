@@ -336,6 +336,18 @@ const setupChunkedTransfer: RequestHandler = (req, res, next) => {
     });
   }
   
+  // Check if user is trying to use streaming with gpt-5-codex models
+  if (req.body.model?.startsWith("gpt-5-codex") && req.body.stream === true) {
+    return res.status(400).json({
+      error: {
+        message: "The gpt-5-codex models do not support streaming. Please set 'stream: false' in your request.",
+        type: "invalid_request_error",
+        param: "stream",
+        code: "streaming_not_supported"
+      }
+    });
+  }
+  
   // Only o1 doesn't support streaming
   if (req.body.model === "o1" || req.body.model === "o1-2024-12-17") {
     req.isChunkedTransfer = true;
@@ -357,9 +369,10 @@ const setupChunkedTransfer: RequestHandler = (req, res, next) => {
 
 // Functions to handle model-specific API routing
 function shouldUseResponsesApi(model: string): boolean {
-  return model === "o1-pro" || model.startsWith("o1-pro-") ||
-         model === "o3-pro" || model.startsWith("o3-pro-") || 
-         model === "codex-mini-latest" || model.startsWith("codex-mini-");
+  return model === "o1-pro" || model.startsWith("o1-pro") ||
+         model === "o3-pro" || model.startsWith("o3-pro") ||
+         model === "codex-mini-latest" || model.startsWith("codex-mini") ||
+         model === "gpt-5-codex-latest" || model.startsWith("gpt-5-codex");
 }
 
 // Preprocessor to redirect requests to the responses API

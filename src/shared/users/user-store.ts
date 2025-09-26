@@ -745,6 +745,8 @@ function getModelFamilyForQuotaUsage(
   if (model.startsWith("deepseek")) return "deepseek";
   if (model.startsWith("grok-")) return "xai";
   if (model.startsWith("kimi")) return "moonshot";
+  if (model.startsWith("qwen")) return "qwen";
+  if (model.startsWith("glm")) return "glm";
 
   switch (api) {
     case "openai":

@@ -9,6 +9,7 @@ import {
   XaiKey,
   CohereKey,
   QwenKey,
+  GlmKey,
   MoonshotKey,
 } from "./shared/key-management";
 import {
@@ -28,6 +29,7 @@ import {
   XaiModelFamily,
   CohereModelFamily,
   QwenModelFamily,
+  GlmModelFamily,
   MoonshotModelFamily,
 } from "./shared/models";
 import { getCostSuffix, getTokenCostUsd, prettyTokens } from "./shared/stats";
@@ -115,6 +117,7 @@ const MODEL_FAMILY_ORDER: ModelFamily[] = [
   "xai",
   "cohere",
   "qwen",
+  "glm",
   "moonshot"
 ];
 
@@ -133,6 +136,8 @@ const keyIsCohereKey = (k: KeyPoolKey): k is CohereKey =>
   k.service === "cohere";
 const keyIsQwenKey = (k: KeyPoolKey): k is QwenKey =>
   k.service === "qwen";
+const keyIsGlmKey = (k: KeyPoolKey): k is GlmKey =>
+  k.service === "glm";
 const keyIsMoonshotKey = (k: KeyPoolKey): k is MoonshotKey =>
   k.service === "moonshot";
 
@@ -206,6 +211,7 @@ export type ServiceInfo = {
   endpoints: {
     openai?: string;
     deepseek?: string;
+    glm?: string;
     xai?: string;
     anthropic?: string;
     "google-ai"?: string;
@@ -221,7 +227,6 @@ export type ServiceInfo = {
   proomptersNow?: number;
   status?: string;
   config: ReturnType<typeof listConfig>;
-  build: string;
 } & { [f in OpenAIModelFamily]?: OpenAIInfo }
   & { [f in AnthropicModelFamily]?: AnthropicInfo; }
   & { [f in AwsBedrockModelFamily]?: AwsInfo }
@@ -233,6 +238,7 @@ export type ServiceInfo = {
   & { [f in XaiModelFamily]?: BaseFamilyInfo }
   & { [f in CohereModelFamily]?: BaseFamilyInfo }
   & { [f in QwenModelFamily]?: BaseFamilyInfo }
+  & { [f in GlmModelFamily]?: BaseFamilyInfo }
   & { [f in MoonshotModelFamily]?: BaseFamilyInfo };
 
 // https://stackoverflow.com/a/66661477
@@ -287,6 +293,9 @@ const SERVICE_ENDPOINTS: { [s in LLMService]: Record<string, string> } = {
   qwen: {
     qwen: `%BASE%/qwen`,
   },
+  glm: {
+    glm: `%BASE%/glm`,
+  },
   moonshot: {
     moonshot: `%BASE%/moonshot`,
   },
@@ -339,7 +348,6 @@ export function buildInfo(baseUrl: string, forAdmin = false): ServiceInfo {
     status,
     ...modelFamilyInfo,
     config: listConfig(),
-    build: process.env.BUILD_INFO || "dev",
   });
 }
 
@@ -449,6 +457,7 @@ function addKeyToAggregates(k: KeyPoolKey) {
   addToService("xai__keys", k.service === "xai" ? 1 : 0);
   addToService("cohere__keys", k.service === "cohere" ? 1 : 0);
   addToService("qwen__keys", k.service === "qwen" ? 1 : 0);
+  addToService("glm__keys", k.service === "glm" ? 1 : 0);
   addToService("moonshot__keys", k.service === "moonshot" ? 1 : 0);
 
   let sumInputTokens = 0;
@@ -615,6 +624,13 @@ function addKeyToAggregates(k: KeyPoolKey) {
     case "qwen":
       k.modelFamilies.forEach(incrementGenericFamilyStats);
       break;
+    case "glm":
+      if (!keyIsGlmKey(k)) throw new Error("Invalid key type");
+      k.modelFamilies.forEach((f) => {
+        incrementGenericFamilyStats(f);
+        addToFamily(`${f}__overQuota`, k.isOverQuota ? 1 : 0);
+      });
+      break;
     case "moonshot":
       k.modelFamilies.forEach(incrementGenericFamilyStats);
       break;
@@ -735,6 +751,9 @@ function getInfoForFamily(family: ModelFamily): BaseFamilyInfo {
         info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
         break;
       case "qwen":
+        info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
+        break;
+      case "glm":
         info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
         break;
       case "moonshot":

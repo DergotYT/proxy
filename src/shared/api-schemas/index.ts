@@ -30,6 +30,7 @@ import {
   MistralAIV1TextCompletionsSchema,
   transformMistralChatToText,
 } from "./mistral-ai";
+import { isGlmModel, isGlmThinkingModel, isGlmVisionModel } from "./glm";
 
 export { OpenAIChatMessage } from "./openai";
 export {
@@ -40,6 +41,7 @@ export {
 } from "./anthropic";
 export { GoogleAIChatMessage } from "./google-ai";
 export { MistralAIChatMessage } from "./mistral-ai";
+export { isGlmModel, isGlmThinkingModel, isGlmVisionModel } from "./glm";
 
 type APIPair = `${APIFormat}->${APIFormat}`;
 type TransformerMap = {

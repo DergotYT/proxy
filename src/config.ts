@@ -59,6 +59,10 @@ type Config = {
    */
   qwenKey?: string;
   /**
+   * Comma-delimited list of GLM API keys.
+   */
+  glmKey?: string;
+  /**
    * Comma-delimited list of Moonshot API keys.
    */
   moonshotKey?: string;
@@ -502,6 +506,7 @@ export const config: Config = {
   openaiKey: getEnvWithDefault("OPENAI_KEY", ""),
   anthropicKey: getEnvWithDefault("ANTHROPIC_KEY", ""),
   qwenKey: getEnvWithDefault("QWEN_KEY", ""),
+  glmKey: getEnvWithDefault("GLM_KEY", ""),
   googleAIKey: getEnvWithDefault("GOOGLE_AI_KEY", ""),
   allowedExpModels: getEnvWithDefault("ALLOWED_EXP_MODELS", ""),
   mistralAIKey: getEnvWithDefault("MISTRAL_AI_KEY", ""),
@@ -637,6 +642,10 @@ function generateSigningKey() {
     config.mistralAIKey,
     config.deepseekKey,
     config.xaiKey,
+    config.cohereKey,
+    config.qwenKey,
+    config.glmKey,
+    config.moonshotKey,
     config.awsCredentials,
     config.gcpCredentials,
     config.azureCredentials,
@@ -814,6 +823,7 @@ export const OMITTED_KEYS = [
   "xaiKey",
   "cohereKey",
   "qwenKey",
+  "glmKey",
   "moonshotKey",
   "mistralAIKey",
   "awsCredentials",

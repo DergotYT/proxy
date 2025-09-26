@@ -4,6 +4,7 @@ import { ModelFamily } from "./models";
 // Prices are per 1 million tokens.
 const MODEL_PRICING: Record<ModelFamily, { input: number; output: number } | undefined> = {
   "deepseek": { input: 0.55, output: 2.19 }, // DeepSeek Reasoner (standard price, input cache miss)
+  "glm": { input: 0.40, output: 1.60 }, // GLM (bigmodel.cn) pricing: 40 cents input, $1.6 output per 1M tokens
   "xai": { input: 5.6, output: 16.8 }, // Grok: Derived from avg $14/1M (assuming 1:3 in/out ratio) - needs official pricing
   "gpt41": { input: 2.00, output: 8.00 },
   "azure-gpt41": { input: 2.00, output: 8.00 },
@@ -71,7 +72,7 @@ const MODEL_PRICING: Record<ModelFamily, { input: number; output: number } | und
   // Ensure all ModelFamily entries from models.ts are covered or have a default.
   // Adding placeholders for families in models.ts but not yet priced here.
   "cohere": { input: 0.15, output: 0.60 }, // Updated to Command R
-  "qwen": { input: 1.40, output: 2.80 }, // Qwen-plus, as an example
+  "qwen": { input: 1.60, output: 6.40 }, // Qwen-max based pricing: $1.6 input, $6.4 output per 1M tokens
   "moonshot": { input: 0.6, output: 2.5 }, // Moonshot kimi k2
 };
 

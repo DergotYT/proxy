@@ -75,6 +75,8 @@ export const validateContextSize: RequestPreprocessor = async (req) => {
     modelMax = 400000;
   } else if (model.match(/^gpt-5-chat-latest$/)) {
     modelMax = 400000;
+  } else if (model.match(/^gpt-5-codex(-latest|-\d{4}-\d{2}-\d{2})?$/)) {
+    modelMax = 400000;
   } else if (model.match(/^chatgpt-4o/)) {
     modelMax = 128000;
   } else if (model.match(/gpt-4-turbo(-\d{4}-\d{2}-\d{2})?$/)) {
@@ -145,8 +147,16 @@ export const validateContextSize: RequestPreprocessor = async (req) => {
   } else if (model.match(/command/) || model.match(/cohere/)) {
     // Default for all other Cohere models
     modelMax = 128000;
+  } else if (model.match(/^qwen/)) {
+    // Qwen models have 256k context window
+    modelMax = 256000;
+  } else if (model.match(/^glm/)) {
+    // GLM models have 131k context window
+    modelMax = 131000;
   } else if (model.match(/^grok-4/)) {
     modelMax = 256000;
+  } else if (model.match(/^grok-4-fast/)) {
+    modelMax = 2000000;
   } else if (model.match(/^grok/)) {
     modelMax = 128000;
   } else if (model.match(/^magistral/)) {

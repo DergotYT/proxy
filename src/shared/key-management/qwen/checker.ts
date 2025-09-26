@@ -12,7 +12,7 @@ import { logger } from "../../../logger";
 import { assertNever } from "../../utils";
 
 const CHECK_TIMEOUT = 10000;
-const API_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions";
+const API_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
 
 export class QwenKeyChecker {
   private log = logger.child({ module: "key-checker", service: "qwen" });
@@ -56,7 +56,7 @@ export class QwenKeyChecker {
       };
 
       const body = {
-        model: "qwen-turbo",
+        model: "qwen-max",
         max_tokens: 5,
         temperature: 0.2,
         messages: [
@@ -77,6 +77,9 @@ export class QwenKeyChecker {
       // Check response status
       if (response.status === 200) {
         return "valid";
+      } else if (response.status === 400) {
+        // Bad request - treat as invalid key
+        return "invalid";
       } else if (response.status === 401) {
         // Invalid API key
         return "invalid";

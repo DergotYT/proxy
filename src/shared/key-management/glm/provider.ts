@@ -1,36 +1,35 @@
-import { KeyProvider, createGenericGetLockoutPeriod } from "..";
-import { QwenKeyChecker, QwenKey } from "./checker";
+import { Key, KeyProvider, createGenericGetLockoutPeriod } from "..";
+import { GlmKeyChecker } from "./checker";
 import { config } from "../../../config";
 import { logger } from "../../../logger";
-import { QwenModelFamily, ModelFamily } from "../../models";
-import { PaymentRequiredError } from "../../errors";
-import { prioritizeKeys } from "../prioritize-keys";
+import { GlmModelFamily, ModelFamily } from "../../models";
 
-// Re-export the QwenKey interface
-export type { QwenKey } from "./checker";
+export interface GlmKey extends Key {
+  readonly service: "glm";
+  readonly modelFamilies: GlmModelFamily[];
+  isOverQuota: boolean;
+}
 
-export class QwenKeyProvider implements KeyProvider<QwenKey> {
-  readonly service = "qwen";
-  
-  private keys: QwenKey[] = [];
-  private checker?: QwenKeyChecker;
+export class GlmKeyProvider implements KeyProvider<GlmKey> {
+  readonly service = "glm";
+
+  private keys: GlmKey[] = [];
+  private checker?: GlmKeyChecker;
   private log = logger.child({ module: "key-provider", service: this.service });
 
   constructor() {
-    // Access the qwenKey property from config using indexing to avoid TypeScript error
-    // since the property was added dynamically
-    const keyConfig = (config as any)["qwenKey"]?.trim();
+    const keyConfig = config.glmKey?.trim();
     if (!keyConfig) {
       return;
     }
 
-    const keys = keyConfig.split(",").map((k: string) => k.trim());
+    const keys = keyConfig.split(",").map((k) => k.trim());
     for (const key of keys) {
       if (!key) continue;
       this.keys.push({
         key,
         service: this.service,
-        modelFamilies: ["qwen"],
+        modelFamilies: ["glm"],
         isDisabled: false,
         isRevoked: false,
         promptCount: 0,
@@ -39,7 +38,7 @@ export class QwenKeyProvider implements KeyProvider<QwenKey> {
         hash: this.hashKey(key),
         rateLimitedAt: 0,
         rateLimitedUntil: 0,
-        tokenUsage: {}, // Initialize new tokenUsage field
+        tokenUsage: {},
         isOverQuota: false,
       });
     }
@@ -57,88 +56,35 @@ export class QwenKeyProvider implements KeyProvider<QwenKey> {
       );
       return;
     }
-    this.checker = new QwenKeyChecker(this.update.bind(this));
+    this.checker = new GlmKeyChecker(this.update.bind(this));
     for (const key of this.keys) {
       void this.checker.checkKey(key);
     }
   }
 
-  public get(model: string, streaming?: boolean): QwenKey {
-    const now = Date.now();
-
-    // First, filter keys based on comprehensive criteria INCLUDING throttling
-    let availableKeys = this.keys.filter(
-      (key) =>
-        !key.isDisabled && // not disabled
-        !key.isRevoked && // not revoked
-        !key.isOverQuota && // not over quota
-        key.modelFamilies.includes("qwen") && // has qwen access
-        now >= key.rateLimitedUntil // not currently rate limited/throttled
-    );
-
+  public get(model: string): GlmKey {
+    const availableKeys = this.keys.filter((k) => !k.isDisabled);
     if (availableKeys.length === 0) {
-      // If no keys are immediately available, check if any are just throttled
-      const throttledKeys = this.keys.filter(
-        (key) =>
-          !key.isDisabled &&
-          !key.isRevoked &&
-          !key.isOverQuota &&
-          key.modelFamilies.includes("qwen") &&
-          now < key.rateLimitedUntil // only difference is this is throttled
-      );
-      
-      if (throttledKeys.length > 0) {
-        this.log.debug(
-          { throttledCount: throttledKeys.length, totalKeys: this.keys.length },
-          "All available Qwen keys are throttled, using least recently throttled key"
-        );
-        // Use the key that will be available soonest
-        availableKeys = [throttledKeys.sort((a, b) => a.rateLimitedUntil - b.rateLimitedUntil)[0]];
-      } else {
-        throw new PaymentRequiredError(
-          `No Qwen keys available for model ${model}`
-        );
-      }
+      throw new Error("No GLM keys available");
     }
-
-    // Use prioritization for better key selection and load balancing
-    const keysByPriority = prioritizeKeys(
-      availableKeys,
-      (a, b) => {
-        // Priority 1: least recently used for load balancing
-        return a.lastUsed - b.lastUsed;
-      }
-    );
-
-    const selectedKey = keysByPriority[0];
-    selectedKey.lastUsed = Date.now();
-    this.throttle(selectedKey.hash);
-    
-    this.log.debug(
-      {
-        keyHash: selectedKey.hash,
-        isOverQuota: selectedKey.isOverQuota,
-        lastUsed: selectedKey.lastUsed,
-        promptCount: selectedKey.promptCount
-      },
-      "Selected Qwen key"
-    );
-    
-    return { ...selectedKey };
+    const key = availableKeys[Math.floor(Math.random() * availableKeys.length)];
+    key.lastUsed = Date.now();
+    this.throttle(key.hash);
+    return { ...key };
   }
 
-  public list(): Omit<QwenKey, "key">[] {
+  public list(): Omit<GlmKey, "key">[] {
     return this.keys.map(({ key, ...rest }) => rest);
   }
 
-  public disable(key: QwenKey): void {
+  public disable(key: GlmKey): void {
     const found = this.keys.find((k) => k.hash === key.hash);
     if (found) {
       found.isDisabled = true;
     }
   }
 
-  public update(hash: string, update: Partial<QwenKey>): void {
+  public update(hash: string, update: Partial<GlmKey>): void {
     const key = this.keys.find((k) => k.hash === hash);
     if (key) {
       Object.assign(key, update);
@@ -149,7 +95,7 @@ export class QwenKeyProvider implements KeyProvider<QwenKey> {
     return this.keys.filter((k) => !k.isDisabled).length;
   }
 
-  public incrementUsage(keyHash: string, modelFamily: QwenModelFamily, usage: { input: number; output: number }) {
+  public incrementUsage(keyHash: string, modelFamily: GlmModelFamily, usage: { input: number; output: number }) {
     const key = this.keys.find((k) => k.hash === keyHash);
     if (!key) return;
 
@@ -158,7 +104,7 @@ export class QwenKeyProvider implements KeyProvider<QwenKey> {
     if (!key.tokenUsage) {
       key.tokenUsage = {};
     }
-    // Qwen only has one model family "qwen"
+    // GLM only has one model family "glm"
     if (!key.tokenUsage[modelFamily]) {
       key.tokenUsage[modelFamily] = { input: 0, output: 0 };
     }
@@ -187,7 +133,7 @@ export class QwenKeyProvider implements KeyProvider<QwenKey> {
     const key = this.keys.find((k) => k.hash === keyHash)!;
     const now = Date.now();
     key.rateLimitedAt = now;
-    key.rateLimitedUntil = now + QwenKeyProvider.RATE_LIMIT_LOCKOUT;
+    key.rateLimitedUntil = now + GlmKeyProvider.RATE_LIMIT_LOCKOUT;
   }
 
   public recheck(): void {
@@ -212,7 +158,7 @@ export class QwenKeyProvider implements KeyProvider<QwenKey> {
     const key = this.keys.find((k) => k.hash === hash)!;
 
     const currentRateLimit = key.rateLimitedUntil;
-    const nextRateLimit = now + QwenKeyProvider.KEY_REUSE_DELAY;
+    const nextRateLimit = now + GlmKeyProvider.KEY_REUSE_DELAY;
 
     key.rateLimitedAt = now;
     key.rateLimitedUntil = Math.max(currentRateLimit, nextRateLimit);

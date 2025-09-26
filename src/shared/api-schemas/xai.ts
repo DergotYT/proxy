@@ -33,9 +33,11 @@ export type ContentItem = z.infer<typeof ContentItemSchema>;
 
 // Helper function to check if a model supports vision
 export function isGrokVisionModel(model: string): boolean {
+  const modelLower = model.toLowerCase();
   // Check if the model name contains '-vision' anywhere in the name
   // This makes it future-proof for new vision models
-  return model.toLowerCase().includes("-vision");
+  // Also include grok-4-fast
+  return modelLower.includes("-vision") || modelLower.includes("grok-4-fast");
 }
 
 // Helper function to check if a model supports image generation

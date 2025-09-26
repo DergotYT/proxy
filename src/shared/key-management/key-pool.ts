@@ -17,6 +17,7 @@ import { DeepseekKeyProvider } from "./deepseek/provider";
 import { XaiKeyProvider } from "./xai/provider";
 import { CohereKeyProvider } from "./cohere/provider";
 import { QwenKeyProvider } from "./qwen/provider";
+import { GlmKeyProvider } from "./glm/provider";
 import { MoonshotKeyProvider } from "./moonshot/provider";
 
 type AllowedPartial = OpenAIKeyUpdate | AnthropicKeyUpdate | Partial<GcpKey>;
@@ -39,6 +40,7 @@ export class KeyPool {
     this.keyProviders.push(new XaiKeyProvider());
     this.keyProviders.push(new CohereKeyProvider());
     this.keyProviders.push(new QwenKeyProvider());
+    this.keyProviders.push(new GlmKeyProvider());
     this.keyProviders.push(new MoonshotKeyProvider());
   }
 
@@ -84,6 +86,7 @@ export class KeyPool {
       service instanceof XaiKeyProvider ||
       service instanceof CohereKeyProvider ||
       service instanceof QwenKeyProvider ||
+      service instanceof GlmKeyProvider ||
       service instanceof MoonshotKeyProvider
     ) {
       service.update(key.hash, { isOverQuota: reason === "quota" });
@@ -214,6 +217,8 @@ export class KeyPool {
       return "cohere";
     } else if (model.includes("qwen")) {
       return "qwen";
+    } else if (model.includes("glm")) {
+      return "glm";
     } else if (model.includes("moonshot")) {
       return "moonshot";
     } else if (model.startsWith("anthropic.claude")) {

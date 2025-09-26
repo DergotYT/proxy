@@ -19,6 +19,7 @@ export type LLMService =
   | "xai"
   | "cohere"
   | "qwen"
+  | "glm"
   | "moonshot";
 
 export type OpenAIModelFamily =
@@ -63,6 +64,7 @@ export type DeepseekModelFamily = "deepseek";
 export type XaiModelFamily = "xai";
 export type CohereModelFamily = "cohere";
 export type QwenModelFamily = "qwen";
+export type GlmModelFamily = "glm";
 export type MoonshotModelFamily = "moonshot";
 
 export type ModelFamily =
@@ -77,6 +79,7 @@ export type ModelFamily =
   | XaiModelFamily
   | CohereModelFamily
   | QwenModelFamily
+  | GlmModelFamily
   | MoonshotModelFamily;
 
 export const MODEL_FAMILIES = (<A extends readonly ModelFamily[]>(
@@ -84,6 +87,7 @@ export const MODEL_FAMILIES = (<A extends readonly ModelFamily[]>(
 ) => arr)([
   "moonshot",
   "qwen",
+  "glm",
   "cohere",
   "xai",
   "deepseek",
@@ -166,6 +170,7 @@ export const LLM_SERVICES = (<A extends readonly LLMService[]>(
   "xai",
   "cohere",
   "qwen",
+  "glm",
   "moonshot"
 ] as const);
 
@@ -174,6 +179,7 @@ export const MODEL_FAMILY_SERVICE: {
 } = {
   moonshot: "moonshot",
   qwen: "qwen",
+  glm: "glm",
   cohere: "cohere",
   xai: "xai",
   deepseek: "deepseek",
@@ -242,7 +248,7 @@ export const MODEL_FAMILY_SERVICE: {
   "mistral-large": "mistral-ai",
 };
 
-export const IMAGE_GEN_MODELS: ModelFamily[] = ["dall-e", "azure-dall-e", "gpt-image", "azure-gpt-image"];
+export const IMAGE_GEN_MODELS: ModelFamily[] = ["dall-e", "azure-dall-e", "gpt-image", "azure-gpt-image", "gemini-flash"];
 
 export const OPENAI_MODEL_FAMILY_MAP: { [regex: string]: OpenAIModelFamily } = {
   "^gpt-image(-\\d+)?(-preview)?(-\\d{4}-\\d{2}-\\d{2})?$": "gpt-image",
@@ -276,6 +282,7 @@ export const OPENAI_MODEL_FAMILY_MAP: { [regex: string]: OpenAIModelFamily } = {
   "^o3(-\\d{4}-\\d{2}-\\d{2})?$": "o3",
   "^o4-mini(-\\d{4}-\\d{2}-\\d{2})?$": "o4-mini",
   "^codex-mini(-latest|-\d{4}-\d{2}-\d{2})?$": "codex-mini",
+  "^gpt-5-codex(-latest|-\\d{4}-\\d{2}-\\d{2})?$": "gpt5",
 };
 
 export function getOpenAIModelFamily(
@@ -294,7 +301,7 @@ export function getClaudeModelFamily(model: string): AnthropicModelFamily {
 }
 
 export function getGoogleAIModelFamily(model: string): GoogleAIModelFamily {
-  // Treat models as Gemni Ultra only if they include "ultra" and are NOT Imagen models
+  // Treat models as Gemini Ultra only if they include "ultra" and are NOT Imagen models
   return model.includes("ultra") && !model.includes("imagen")
     ? "gemini-ultra"
     : model.includes("flash")
@@ -423,6 +430,8 @@ export function getModelFamilyForRequest(req: Request): ModelFamily {
     modelFamily = getAzureOpenAIModelFamily(model);
   } else if (req.service === "qwen") {
     modelFamily = "qwen";
+  } else if (req.service === "glm") {
+    modelFamily = "glm";
   } else {
     switch (req.outboundApi) {
       case "anthropic-chat":
