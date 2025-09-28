@@ -10,21 +10,19 @@ const openRouterBaseUrl = "https://openrouter.ai/api/v1";
 
 function selectUpstreamPath(manager: ProxyReqManager) {
   const req = manager.request;
-  let pathname = req.url.split("?")[0];
-
-  // OpenRouter's API URL already contains /api/v1.
-  // The path coming here from the router (e.g., /v1/chat/completions) needs to be stripped of /v1.
-  if (pathname.startsWith("/v1/")) {
-    pathname = pathname.substring(3); // Removes "/v1"
-  }
+  const pathname = req.url.split("?")[0];
   
-  // Clean up any other variations like /v1
-  if (pathname === "/v1") {
-      pathname = "/";
+  // ИСПРАВЛЕНИЕ: Удаляем /v1/ префикс, который был добавлен addV1 или уже присутствовал.
+  let newPathname = pathname;
+
+  // Если путь начинается с /v1/, удаляем его.
+  // Например: /v1/chat/completions -> /chat/completions
+  if (newPathname.startsWith("/v1/")) {
+    newPathname = newPathname.substring(3);
   }
 
-  // Use the cleaned pathname
-  manager.setPath(pathname);
+  // Обновляем путь, сохраняя query parameters (если они были)
+  manager.setPath(newPathname + req.url.substring(pathname.length));
 }
 
 const openRouterProxy = createQueuedProxyMiddleware({
