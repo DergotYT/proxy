@@ -6,33 +6,30 @@ import { addKey, createPreprocessorMiddleware, finalizeBody } from "./middleware
 import { createQueuedProxyMiddleware } from "./middleware/request/proxy-middleware-factory";
 import { ProxyReqManager } from "./middleware/request/proxy-req-manager";
 
-const openRouterTarget = "https://openrouter.ai";
-const openRouterApiPrefix = "/api/v1";
+const openRouterBaseUrl = "https://openrouter.ai/api/v1";
 
 function selectUpstreamPath(manager: ProxyReqManager) {
   const req = manager.request;
-  const pathname = req.url.split("?")[0];
-  
-  // После прохода через proxyRouter.use("/openrouter", addV1, ...)
-  // Входящий URL /proxy/openrouter/v1/chat/completions превратился в /chat/completions.
-  // Нам нужно преобразовать его в /api/v1/chat/completions.
-  
-  // Если addV1 не сработал и путь остался /v1/chat/completions:
-  if (pathname.startsWith("/v1")) {
-      manager.setPath(`${openRouterApiPrefix}${pathname.slice(3)}`);
-  } 
-  // Если addV1 сработал и путь /chat/completions:
-  else if (!pathname.startsWith(openRouterApiPrefix)) {
-    manager.setPath(`${openRouterApiPrefix}${pathname}`);
+  let pathname = req.url.split("?")[0];
+
+  // OpenRouter's API URL already contains /api/v1.
+  // The path coming here from the router (e.g., /v1/chat/completions) needs to be stripped of /v1.
+  if (pathname.startsWith("/v1/")) {
+    pathname = pathname.substring(3); // Removes "/v1"
   }
   
-  // Добавляем логирование для отладки
-  req.log.debug({ originalUrl: req.originalUrl, finalPath: manager.path }, "OpenRouter path selection");
+  // Clean up any other variations like /v1
+  if (pathname === "/v1") {
+      pathname = "/";
+  }
+
+  // Use the cleaned pathname
+  manager.setPath(pathname);
 }
 
-
 const openRouterProxy = createQueuedProxyMiddleware({
-  target: openRouterTarget,
+  target: openRouterBaseUrl,
+  // OpenRouter uses an OpenAI-compatible API for chat completions
   mutations: [selectUpstreamPath, addKey, finalizeBody],
 });
 
@@ -49,15 +46,15 @@ const openRouterPreprocessor = createPreprocessorMiddleware(
 
 const openrouterRouter = Router();
 
-// Endpoint для всего, что не /models
+// Endpoint for chat completions (OpenAI compatible)
 openrouterRouter.post(
-  "/*", // <-- Ловит все POST-запросы, включая /chat/completions
+  "/chat/completions",
   ipLimiter,
   openRouterPreprocessor,
   openRouterProxy
 );
 
-// Endpoint для model listing
+// Endpoint for model listing
 openrouterRouter.get(
     "/models",
     ipLimiter,
