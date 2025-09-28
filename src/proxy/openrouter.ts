@@ -12,16 +12,19 @@ function selectUpstreamPath(manager: ProxyReqManager) {
   const req = manager.request;
   const pathname = req.url.split("?")[0];
   
-  // ИСПРАВЛЕНИЕ: Удаляем /v1/ префикс, который был добавлен addV1 или уже присутствовал.
+  // ИСПРАВЛЕНИЕ: Проверяем и удаляем /v1 префикс, если он есть,
+  // так как OpenRouter не ожидает его в своем прокси-роуте.
   let newPathname = pathname;
 
-  // Если путь начинается с /v1/, удаляем его.
-  // Например: /v1/chat/completions -> /chat/completions
   if (newPathname.startsWith("/v1/")) {
+    // Если клиент отправил /v1/chat/completions, он становится /chat/completions
     newPathname = newPathname.substring(3);
+  } else if (newPathname.startsWith("/v1")) {
+    // Если клиент отправил /v1models, он становится /models
+    newPathname = newPathname.substring(2);
   }
 
-  // Обновляем путь, сохраняя query parameters (если они были)
+  // Обновляем путь, сохраняя query parameters
   manager.setPath(newPathname + req.url.substring(pathname.length));
 }
 
@@ -45,6 +48,13 @@ const openRouterPreprocessor = createPreprocessorMiddleware(
 const openrouterRouter = Router();
 
 // Endpoint for chat completions (OpenAI compatible)
+// Ожидаемые пути: /v1/chat/completions или /chat/completions
+openrouterRouter.post(
+  "/v1/chat/completions",
+  ipLimiter,
+  openRouterPreprocessor,
+  openRouterProxy
+);
 openrouterRouter.post(
   "/chat/completions",
   ipLimiter,
@@ -53,10 +63,17 @@ openrouterRouter.post(
 );
 
 // Endpoint for model listing
+// Ожидаемые пути: /v1/models или /models
+openrouterRouter.get(
+    "/v1/models",
+    ipLimiter,
+    openRouterProxy
+);
 openrouterRouter.get(
     "/models",
     ipLimiter,
     openRouterProxy
 );
+
 
 export const openrouter = openrouterRouter;
