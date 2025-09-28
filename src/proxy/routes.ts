@@ -62,7 +62,7 @@ proxyRouter.use("/cohere", addV1, cohere);
 proxyRouter.use("/qwen", addV1, qwen);
 proxyRouter.use("/glm", addV1, glm);
 proxyRouter.use("/moonshot", addV1, moonshot);
-proxyRouter.use("/openrouter", addV1, openrouter);
+proxyRouter.use("/openrouter", openrouter);
 
 // Redirect browser requests to the homepage.
 proxyRouter.get("*", (req, res, next) => {
