@@ -245,6 +245,7 @@ export type ServiceInfo = {
   tookens?: string;
   proomptersNow?: number;
   status?: string;
+  openrouterTotalBalance?: string; // <--- ADDED HERE
   config: ReturnType<typeof listConfig>;
 } & { [f in OpenAIModelFamily]?: OpenAIInfo }
   & { [f in AnthropicModelFamily]?: AnthropicInfo; }
@@ -426,9 +427,12 @@ function getTrafficStats(): TrafficStats {
 }
 
 function getServiceModelStats(accessibleFamilies: Set<ModelFamily>) {
-  const serviceInfo: {
+  // Объединяем ServiceAggregate и openrouterTotalBalance в одну структуру для возврата
+  type ServiceInfoAggregates = {
     [s in LLMService as `${s}${"Keys" | "Orgs"}`]?: number;
-  } = {};
+  } & { openrouterTotalBalance?: string }; // <--- ADDED openrouterTotalBalance
+
+  const serviceInfo: ServiceInfoAggregates = {};
   const modelFamilyInfo: { [f in ModelFamily]?: BaseFamilyInfo } = {};
 
   for (const service of LLM_SERVICES) {
