@@ -20,10 +20,8 @@ export type OpenRouterKeyUpdate = Omit<
 
 export type OpenRouterKeyStatus = 
   | 'PAID (Balance)' 
-  | 'PAID (Pay-as-you-go)' 
-  | 'PAID (No Credits)' 
-  | 'PAID (No Models)' 
-  | 'PAID (Limit Reached)' 
+  | 'PAID (No Credits)' // Вместо PAID (Pay-as-you-go)
+  | 'PAID (Limit Reached)'
   | 'FREE (Active)' 
   | 'FREE (Exhausted)' 
   | 'DEAD' 
@@ -42,17 +40,17 @@ export interface OpenRouterKey extends Key {
   /** Whether the key is over its quota/limit (e.g., Free Exhausted, Paid No Credits/Limit Reached) */
   isOverQuota: boolean;
   /** The remaining balance or limit amount in USD. Null if not applicable/unknown. */
-  remainingBalance: number | null; // <--- ADDED
+  remainingBalance: number | null; 
+  /** Indicates if the key is explicitly a free tier key (based on API response). */
+  isFreeTier: boolean; 
 }
 
 const STATUS_PRIORITY: { [status in OpenRouterKeyStatus]: number } = {
   'PAID (Balance)': 5,
-  'PAID (Pay-as-you-go)': 4,
   'FREE (Active)': 3,
-  'PAID (No Models)': 2,
-  'FREE (Exhausted)': 1, 
   'PAID (No Credits)': 1,
   'PAID (Limit Reached)': 1,
+  'FREE (Exhausted)': 1, 
   'DEAD': 0,
   'UNKNOWN (Rate Limited)': 0,
 };
@@ -98,7 +96,8 @@ export class OpenRouterKeyProvider implements KeyProvider<OpenRouterKey> {
         status: 'UNKNOWN (Rate Limited)', 
         info: 'Key not yet checked',
         isPaid: false, // Default to false until checked
-        remainingBalance: null, // <--- ADDED
+        remainingBalance: null, 
+        isFreeTier: false, // Default to false until checked
       };
       this.keys.push(newKey);
     }
@@ -127,11 +126,19 @@ export class OpenRouterKeyProvider implements KeyProvider<OpenRouterKey> {
       // 2. Must be checked and have a non-DEAD/non-UNKNOWN status
       if (STATUS_PRIORITY[k.status] === 0) return false;
       
-      // 3. Paid key must be used for paid model access
-      if (requiredFamily === 'openrouter-paid' && !k.isPaid) return false;
+      // 3. Paid key logic: must be paid, and must have balance (if a balance is reported)
+      if (requiredFamily === 'openrouter-paid') {
+          if (!k.isPaid) return false; // Must be marked as Paid
+          // If we know the balance, enforce it
+          if (k.remainingBalance !== null && k.remainingBalance <= 0) return false; 
+      }
       
-      // 4. If key is over quota/limit, it can only be used for free models (as a free key fallback)
-      if (k.isOverQuota && requiredFamily === 'openrouter-paid') return false;
+      // 4. Free key logic: can be Free Active or a Paid key not used for Paid access
+      if (requiredFamily === 'openrouter-free') {
+          // If it's a Free Tier key, must be active
+          if (k.isFreeTier && k.status === 'FREE (Exhausted)') return false;
+          // Paid keys that are over quota can still be used for free access
+      }
 
       // 5. Must not be rate limit locked
       const now = Date.now();
@@ -144,8 +151,8 @@ export class OpenRouterKeyProvider implements KeyProvider<OpenRouterKey> {
 
     if (availableKeys.length === 0) {
       const message = requiredFamily === 'openrouter-paid'
-        ? "No active OpenRouter Paid keys available. Please check quotas or contact admin."
-        : "No active OpenRouter Free keys available. Please check quotas or contact admin.";
+        ? "No active OpenRouter Paid keys available (Balance depleted or key limit reached)."
+        : "No active OpenRouter Free keys available (Free tier exhausted).";
       throw new PaymentRequiredError(message);
     }
     
@@ -155,7 +162,12 @@ export class OpenRouterKeyProvider implements KeyProvider<OpenRouterKey> {
       const bPriority = STATUS_PRIORITY[b.status];
       if (aPriority !== bPriority) return bPriority - aPriority;
 
-      // Priority 2: Last Used (lower is better - LRU)
+      // Priority 2: Remaining Balance (higher is better)
+      const aBalance = a.remainingBalance || 0;
+      const bBalance = b.remainingBalance || 0;
+      if (aBalance !== bBalance) return bBalance - aBalance;
+
+      // Priority 3: Last Used (lower is better - LRU)
       return a.lastUsed - b.lastUsed;
     });
 
@@ -175,11 +187,14 @@ export class OpenRouterKeyProvider implements KeyProvider<OpenRouterKey> {
     const keyFromPool = this.keys.find((k) => k.hash === hash)!;
     
     if (update.status) {
-      const isPaid = update.status.startsWith('PAID') && update.status !== 'PAID (No Models)';
+      const isPaid = update.status.startsWith('PAID');
       const isOverQuota = update.status.includes('No Credits') || update.status.includes('Exhausted') || update.status.includes('Limit Reached');
       
       update.isPaid = isPaid;
       update.isOverQuota = isOverQuota;
+      
+      // Update the explicit FreeTier flag based on new status
+      update.isFreeTier = update.status.startsWith('FREE');
       
       if (update.status === 'DEAD' || update.status === 'UNKNOWN (Rate Limited)') {
         update.isDisabled = true;
@@ -237,7 +252,8 @@ export class OpenRouterKeyProvider implements KeyProvider<OpenRouterKey> {
         isDisabled: false, 
         isRevoked: false,
         lastChecked: 0,
-        remainingBalance: null, // <--- ADDED
+        remainingBalance: null, 
+        isFreeTier: false, 
       });
     });
     this.checker?.scheduleNextCheck();

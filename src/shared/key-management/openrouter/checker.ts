@@ -20,11 +20,12 @@ type KeyInfoResponse = {
   };
 };
 
-type ModelsResponse = {
-  data: Array<{
-    id: string;
-    pricing?: { completion?: string };
-  }>;
+type CreditsResponse = {
+    data: {
+        total_credits: string | number;
+        total_usage: string | number;
+        // other fields omitted
+    };
 };
 
 type ErrorResponse = {
@@ -32,7 +33,7 @@ type ErrorResponse = {
 };
 
 type KeyInfoResult = KeyInfoResponse | ErrorResponse;
-type ModelsResult = ModelsResponse | ErrorResponse;
+type CreditsResult = CreditsResponse | ErrorResponse;
 
 type UpdateFn = typeof OpenRouterKeyProvider.prototype.update;
 
@@ -48,9 +49,9 @@ export class OpenRouterKeyChecker extends KeyCheckerBase<OpenRouterKey> {
 
   protected async testKeyOrFail(key: OpenRouterKey) {
     const { status, info, remainingBalance } = await this.testKey(key);
-    this.updateKey(key.hash, { status, info, remainingBalance }); // <--- ADDED remainingBalance
+    this.updateKey(key.hash, { status, info, remainingBalance });
     this.log.info(
-      { key: key.hash, status, info, remainingBalance }, // <--- ADDED logging
+      { key: key.hash, status, info, remainingBalance },
       "Checked OpenRouter key."
     );
   }
@@ -60,7 +61,7 @@ export class OpenRouterKeyChecker extends KeyCheckerBase<OpenRouterKey> {
       this.updateKey(key.hash, { 
         status: 'UNKNOWN (Rate Limited)', 
         info: 'Rate limit exceeded during check.' ,
-        remainingBalance: null, // <--- ADDED
+        remainingBalance: null,
       });
       return;
     }
@@ -71,10 +72,10 @@ export class OpenRouterKeyChecker extends KeyCheckerBase<OpenRouterKey> {
     );
     const oneHour = 60 * 60 * 1000;
     const next = Date.now() - (KEY_CHECK_PERIOD - oneHour);
-    this.updateKey(key.hash, { lastChecked: next, remainingBalance: null }); // <--- ADDED
+    this.updateKey(key.hash, { lastChecked: next, remainingBalance: null });
   }
 
-  private async makeRequest<T extends KeyInfoResult | ModelsResult>(key: OpenRouterKey, endpoint: string, method: 'GET' | 'POST' = 'GET', data?: any): Promise<{ status: number, data: T }> {
+  private async makeRequest<T extends KeyInfoResult | CreditsResult>(key: OpenRouterKey, endpoint: string, method: 'GET' | 'POST' = 'GET', data?: any): Promise<{ status: number, data: T }> {
     const headers = { 'Authorization': `Bearer ${key.key}`, 'Content-Type': 'application/json' };
     const config = { headers };
     
@@ -96,17 +97,39 @@ export class OpenRouterKeyChecker extends KeyCheckerBase<OpenRouterKey> {
     }
   }
   
+  private parseCredits(creditsResult: CreditsResult): { remainingBalance: number, creditsInfoStr: string } {
+    const defaultResult = { remainingBalance: -1, creditsInfoStr: "Account balance N/A" };
+    
+    if ('error' in creditsResult) {
+        return defaultResult;
+    }
+    
+    const credits = (creditsResult as CreditsResponse).data;
+    const totalCredits = parseFloat(credits.total_credits as string || '0');
+    const totalUsage = parseFloat(credits.total_usage as string || '0');
+    
+    if (isNaN(totalCredits) || isNaN(totalUsage)) {
+        return defaultResult;
+    }
+    
+    const remainingBalance = totalCredits - totalUsage;
+    const creditsInfoStr = `Account Balance: $${remainingBalance.toFixed(4)} (Used $${totalUsage.toFixed(2)}/$${totalCredits.toFixed(2)})`;
+    
+    return { remainingBalance, creditsInfoStr };
+  }
+
+  
   private async testKey(key: OpenRouterKey): Promise<{ status: OpenRouterKeyStatus, info: string, remainingBalance: number | null }> {
     const { status: keyStatus, data: keyResult } = await this.makeRequest<KeyInfoResult>(key, 'key');
 
     if (keyStatus === 429) {
-      return { status: 'UNKNOWN (Rate Limited)', info: "Could not verify due to rate limits", remainingBalance: null }; // <--- ADDED
+      return { status: 'UNKNOWN (Rate Limited)', info: "Could not verify due to rate limits", remainingBalance: null };
     }
     
     const keyData = (keyResult as KeyInfoResponse).data; 
     if (keyStatus !== 200 || !keyData) {
       const errorMsg = (keyResult as ErrorResponse).error?.message || 'Invalid response';
-      return { status: 'DEAD', info: errorMsg, remainingBalance: null }; // <--- ADDED
+      return { status: 'DEAD', info: errorMsg, remainingBalance: null };
     }
     
     const keyInfo = keyData;
@@ -117,79 +140,44 @@ export class OpenRouterKeyChecker extends KeyCheckerBase<OpenRouterKey> {
       const remaining = Math.max(0, 0.01 - usage); 
       const status: OpenRouterKeyStatus = remaining > 0.000001 ? 'FREE (Active)' : 'FREE (Exhausted)';
       const info = `Remaining: $${remaining.toFixed(6)}`;
-      return { status, info, remainingBalance: remaining }; // <--- ADDED
+      return { status, info, remainingBalance: remaining };
     } else {
-      // Paid key logic
+      // Paid key logic: Get Account Balance first
+      const { status: creditsStatus, data: creditsResult } = await this.makeRequest<CreditsResult>(key, 'credits');
+      const { remainingBalance, creditsInfoStr } = this.parseCredits(creditsResult);
+
       const limitRemaining = keyInfo.limit_remaining;
       const limitVal = keyInfo.limit;
+      const limitStr = `Key Limit: $${limitVal?.toFixed(2) || 'None'}`;
       
-      if (limitRemaining !== null && limitRemaining > 0) {
-        const limitStr = limitVal !== null ? `Limit: $${limitVal.toFixed(2)}` : "No limit";
-        const info = `Remaining: $${limitRemaining.toFixed(4)} | ${limitStr}`;
-        return { status: 'PAID (Balance)', info, remainingBalance: limitRemaining }; // <--- ADDED
-      }
-      
-      // If limit_remaining is 0 or null, test a request.
-      const cheapestModel = await this.getCheapestPaidModelId(key);
-      const testModelId = cheapestModel.id;
+      let finalRemainingBalance = remainingBalance > -1 ? remainingBalance : null;
 
-      if (!testModelId) {
-        return { status: 'PAID (No Models)', info: "Key is valid but has no paid models enabled", remainingBalance: null }; // <--- ADDED
+      // 1. Check, if key's spending limit has been reached. This has highest priority.
+      if (limitRemaining !== null && limitRemaining <= 0) {
+        return { 
+            status: 'PAID (Limit Reached)', 
+            info: `Key's spending limit has been reached | ${limitStr} | ${creditsInfoStr}`, 
+            remainingBalance: 0 
+        };
       }
       
-      const { status: testStatus, data: testData } = await this.testModelRequest(key, testModelId);
-      const errorMsg = (testData as ErrorResponse).error?.message || '';
-
-      if (testStatus === 200) {
-        return { status: 'PAID (Pay-as-you-go)', info: "Active, no pre-paid balance or limit", remainingBalance: null }; // <--- ADDED
-      } 
-      
-      if (testStatus === 402) {
-        return { status: 'PAID (No Credits)', info: "Out of pre-paid credits", remainingBalance: 0 }; // <--- ADDED
+      // 2. Check Account Balance (total_credits - total_usage)
+      if (remainingBalance > 0) {
+          const limitRemStr = limitRemaining !== null ? `Key Limit Remaining: $${limitRemaining.toFixed(4)}` : "";
+          const info = `${limitRemStr} | ${limitStr} | ${creditsInfoStr}`.trim().replace(/^ \|/, '').replace(/\| $/, '');
+          return { 
+              status: 'PAID (Balance)', 
+              info: info, 
+              remainingBalance: finalRemainingBalance 
+          };
       }
       
-      if (testStatus === 400 && errorMsg.includes("Key limit exceeded")) {
-        return { status: 'PAID (Limit Reached)', info: "Monthly spending limit has been reached", remainingBalance: 0 }; // <--- ADDED
-      }
-      
-      return { status: 'DEAD', info: errorMsg || 'Test request failed', remainingBalance: null }; // <--- ADDED
+      // 3. If Account Balance is zero or negative, key is out of credits.
+      return { 
+          status: 'PAID (No Credits)', 
+          info: `Out of pre-paid credits | ${limitStr} | ${creditsInfoStr}`, 
+          remainingBalance: finalRemainingBalance !== null ? Math.max(0, finalRemainingBalance) : 0 
+      };
     }
-  }
-
-  private async getCheapestPaidModelId(key: OpenRouterKey): Promise<{ id: string | null, price: number }> {
-    const { status, data: modelResult } = await this.makeRequest<ModelsResult>(key, 'models');
-    
-    const modelData = (modelResult as ModelsResponse).data; 
-    if (status !== 200 || !modelData) {
-        return { id: null, price: Infinity };
-    }
-    
-    let cheapestModelId: string | null = null;
-    let minPrice = Infinity;
-
-    for (const model of modelData) {
-        const priceStr = model.pricing?.completion;
-        if (priceStr) {
-            try {
-                const price = parseFloat(priceStr);
-                if (price > 0 && price < minPrice) {
-                    minPrice = price;
-                    cheapestModelId = model.id;
-                }
-            } catch (e) {
-                // Ignore invalid pricing strings
-            }
-        }
-    }
-    return { id: cheapestModelId, price: minPrice };
-  }
-  
-  private async testModelRequest(key: OpenRouterKey, modelId: string): Promise<{ status: number, data: any }> {
-    const payload = { 
-      "model": modelId, 
-      "messages": [{"role": "user", "content": "1"}], 
-      "max_tokens": 1
-    };
-    return this.makeRequest<any>(key, 'chat/completions', 'POST', payload);
   }
 }
