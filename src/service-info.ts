@@ -1,3 +1,5 @@
+// src/service-info.ts
+
 import { config, listConfig } from "./config";
 import {
   AnthropicKey,
@@ -185,6 +187,7 @@ type AllStats = {
   outputTokens: number; // Added
   legacyTokens?: number; // Added
   tokenCost: number;
+  openRouterTotalBalance?: number; // <--- ADDED
 } & { [modelFamily in ModelFamily]?: ModelAggregates } & {
   [service in LLMService as `${service}__${ServiceAggregate}`]?: number;
 };
@@ -193,6 +196,7 @@ type OpenRouterInfo = BaseFamilyInfo & {
   paidKeys?: number;
   freeActiveKeys?: number;
   overQuotaKeys?: number;
+  totalRemainingBalance?: string; // <--- ADDED
 };
 
 type BaseFamilyInfo = {
@@ -437,6 +441,12 @@ function getServiceModelStats(accessibleFamilies: Set<ModelFamily>) {
       serviceInfo.openaiOrgs = getUniqueOpenAIOrgs(keyPool.list());
     }
   }
+  
+  // Добавляем общий баланс OpenRouter
+  if (serviceStats.get("openrouter__keys")) {
+      const totalBalance = serviceStats.get("openRouterTotalBalance") || 0;
+      serviceInfo.openrouterTotalBalance = `$${totalBalance.toFixed(2)}`;
+  }
 
   // Build model family info in the defined order for logical grouping
   for (const family of MODEL_FAMILY_ORDER) {
@@ -680,6 +690,11 @@ function addKeyToAggregates(k: KeyPoolKey) {
     case "openrouter":
       if (!keyIsOpenRouterKey(k)) throw new Error("Invalid key type");
       addToService("openrouter__uncheckedKeys", Boolean(k.lastChecked) ? 0 : 1);
+      
+      // Агрегируем оставшийся баланс
+      if (k.remainingBalance !== null && k.remainingBalance > 0) {
+          addToService("openRouterTotalBalance", k.remainingBalance); 
+      }
 
       const isPaidActive = k.isPaid && !k.isOverQuota && !k.isDisabled; // PAID (Balance/Pay-as-you-go)
       const isFreeActive = k.status === 'FREE (Active)' && !k.isDisabled; // FREE (Active)
@@ -693,14 +708,12 @@ function addKeyToAggregates(k: KeyPoolKey) {
            // activeKeys = 1, только если ключ Paid и может быть использован для платных моделей
            addToFamily(`${f}__active`, isPaidActive ? 1 : 0); 
            addToFamily(`${f}__paidKeys`, isPaidActive ? 1 : 0); 
-           // Paid over quota: PAID (No Credits) или PAID (Limit Reached)
            const isPaidOverQuota = (k.status === 'PAID (No Credits)' || k.status === 'PAID (Limit Reached)') && !k.isDisabled;
-           addToFamily(`${f}__overQuota`, isPaidOverQuota ? 1 : 0);
+           addToFamily(`${f}__overQuota`, isPaidOverQuota ? 1 : 0); 
         } else if (f === 'openrouter-free') {
            // activeKeys = 1, только если ключ Free и активен (т.е. не Exhausted)
            addToFamily(`${f}__active`, isFreeActive ? 1 : 0); 
            addToFamily(`${f}__freeActiveKeys`, isFreeActive ? 1 : 0); 
-           // Free over quota: FREE (Exhausted)
            addToFamily(`${f}__overQuota`, isFreeExhausted ? 1 : 0); 
         } else {
              // Fallback for other families if somehow included in OR keys
@@ -837,6 +850,12 @@ function getInfoForFamily(family: ModelFamily): BaseFamilyInfo {
         info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
         if (family === 'openrouter-paid') {
           info.paidKeys = familyStats.get(`${family}__paidKeys`) || 0;
+          
+          // Отображаем суммарный баланс только в paid-секции для ясности
+          const totalBalance = serviceStats.get("openRouterTotalBalance") || 0;
+          if (totalBalance > 0) {
+              info.totalRemainingBalance = `$${totalBalance.toFixed(2)}`;
+          }
         } else if (family === 'openrouter-free') {
           info.freeActiveKeys = familyStats.get(`${family}__freeActiveKeys`) || 0;
         }

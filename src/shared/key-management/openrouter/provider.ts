@@ -41,6 +41,8 @@ export interface OpenRouterKey extends Key {
   isPaid: boolean;
   /** Whether the key is over its quota/limit (e.g., Free Exhausted, Paid No Credits/Limit Reached) */
   isOverQuota: boolean;
+  /** The remaining balance or limit amount in USD. Null if not applicable/unknown. */
+  remainingBalance: number | null; // <--- ADDED
 }
 
 const STATUS_PRIORITY: { [status in OpenRouterKeyStatus]: number } = {
@@ -96,6 +98,7 @@ export class OpenRouterKeyProvider implements KeyProvider<OpenRouterKey> {
         status: 'UNKNOWN (Rate Limited)', 
         info: 'Key not yet checked',
         isPaid: false, // Default to false until checked
+        remainingBalance: null, // <--- ADDED
       };
       this.keys.push(newKey);
     }
@@ -234,6 +237,7 @@ export class OpenRouterKeyProvider implements KeyProvider<OpenRouterKey> {
         isDisabled: false, 
         isRevoked: false,
         lastChecked: 0,
+        remainingBalance: null, // <--- ADDED
       });
     });
     this.checker?.scheduleNextCheck();
