@@ -1,5 +1,3 @@
-// src/proxy/middleware/response/index.ts
-
 /* This file is fucking horrendous, sorry */
 // TODO: extract all per-service error response handling into its own modules
 import { Request, Response } from "express";
@@ -289,7 +287,7 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
     keyPool.disable(req.key!, "revoked");
     await reenqueueRequest(req);
     throw new RetryableError(`${service} key authentication failed, retrying with different key.`);
-    } // <--- ИСПРАВЛЕНО: Добавлена закрывающая скобка для else
+    }
   } else if (statusCode === 402) {
     // Deepseek specific - insufficient balance
     if (service === "deepseek") {
@@ -358,6 +356,19 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
       case "xai":
         await reenqueueRequest(req);
         throw new RetryableError("XAI key lacks permissions, retrying with different key.");
+      case "openrouter": // <--- ADDED OPENROUTER 403 LOGIC
+        const message = errorPayload.error?.message || "";
+        if (message.includes("Key limit exceeded")) {
+            // 403 Forbidden с текстом "Key limit exceeded" - это исчерпание квоты.
+            keyPool.disable(req.key!, "quota");
+            await reenqueueRequest(req);
+            throw new RetryableError("OpenRouter key limit exceeded (403), retrying with different key.");
+        } else {
+            // Любой другой 403, вероятно, является невалидным/отозванным ключом.
+            keyPool.disable(req.key!, "revoked");
+            await reenqueueRequest(req);
+            throw new RetryableError("OpenRouter key is invalid or lacks permissions (403), retrying with different key.");
+        }
     }
   } else if (statusCode === 429) {
     switch (service) {
@@ -1097,6 +1108,8 @@ async function handleOpenRouterError(
   req: Request,
   errorPayload: ProxiedErrorPayload
 ) {
+  // NOTE: OpenRouter's 403 (Key limit exceeded) is handled directly in handleUpstreamErrors
+  
   const statusCode = req.key!.service === "openrouter" ? (req.res as any)?.statusCode : undefined;
   const error = errorPayload.error || {};
   const message = error.message || errorPayload.message || "";
@@ -1104,10 +1117,9 @@ async function handleOpenRouterError(
   // 400 Bad Request
   if (statusCode === 400) {
     if (message.includes("Key limit exceeded")) {
-      // Key limit exceeded is a 400 on OpenRouter, treat as quota exhaustion
       keyPool.disable(req.key!, "quota");
       await reenqueueRequest(req);
-      throw new RetryableError("OpenRouter key limit exceeded, retrying with different key.");
+      throw new RetryableError("OpenRouter key limit exceeded (400), retrying with different key.");
     }
     errorPayload.proxy_note = `The OpenRouter API rejected the request. Check the error message for details.`;
   }
@@ -1128,7 +1140,10 @@ async function handleOpenRouterError(
   
   // 404 Not Found (e.g., model not found)
   if (statusCode === 404) {
-    errorPayload.proxy_note = `The OpenRouter key does not support the requested model or model does not exist.`;
+    // Treat as key unable to access model or service (revoked capabilities)
+    keyPool.disable(req.key!, "revoked"); 
+    await reenqueueRequest(req);
+    throw new RetryableError("OpenRouter key does not support the requested model (404), retrying with different key.");
   }
   
   // 429 Too Many Requests
