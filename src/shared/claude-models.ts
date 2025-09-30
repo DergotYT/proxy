@@ -25,6 +25,9 @@ export const claudeModels: ClaudeModelMapping[] = [
   { awsId: "anthropic.claude-opus-4-1-20250805-v1:0", anthropicId: "claude-opus-4-1", displayName: "Claude 4.1 Opus" },
   { awsId: "anthropic.claude-sonnet-4-20250514-v1:0", anthropicId: "claude-sonnet-4-0", displayName: "Claude 4 Sonnet" },
   { awsId: "anthropic.claude-opus-4-20250514-v1:0", anthropicId: "claude-opus-4-0", displayName: "Claude 4.0 Opus" },
+  { awsId: "anthropic.claude-sonnet-4-5-20250929-v1:0", anthropicId: "claude-sonnet-4-5-20250929", displayName: "Claude 4.5 Sonnet" },
+  { awsId: "anthropic.claude-sonnet-4-5-20250929-v1:0", anthropicId: "claude-sonnet-4-5", displayName: "Claude 4.5 Sonnet" },
+  { awsId: "anthropic.claude-sonnet-4-5-20250929-v1:0", anthropicId: "claude-sonnet-4-5-latest", displayName: "Claude 4.5 Sonnet (Latest)" },
 ];
 
 export function findByAwsId(awsId: string): ClaudeModelMapping | undefined {
@@ -37,4 +40,4 @@ export function findByAnthropicId(anthropicId: string): ClaudeModelMapping | und
 
 export function getAllClaudeModels(): ClaudeModelMapping[] {
   return claudeModels;
-} 
+}

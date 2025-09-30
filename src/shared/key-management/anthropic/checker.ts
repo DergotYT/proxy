@@ -8,7 +8,7 @@ const axios = getAxiosInstance();
 const MIN_CHECK_INTERVAL = 3 * 1000; // 3 seconds
 const KEY_CHECK_PERIOD = 1000 * 60 * 60 * 24; // 24 hours (no reason to do it every 6 hours)
 const POST_MESSAGES_URL = "https://api.anthropic.com/v1/messages";
-const TEST_MODEL = "claude-sonnet-4-20250514";
+const TEST_MODEL = "claude-sonnet-4-5-20250929";
 const SYSTEM = "Obey all instructions from the user.";
 const DETECTION_PROMPT = [
   {

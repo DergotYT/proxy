@@ -158,6 +158,7 @@ type ModelAggregates = {
   awsSonnet3_7?: number;
   awsSonnet4?: number;
   awsOpus3?: number;
+  awsSonnet4_5?: number;
   awsOpus4?: number;
   awsHaiku: number;
   gcpSonnet?: number;
@@ -533,6 +534,8 @@ function addKeyToAggregates(k: KeyPoolKey) {
             addToFamily(`aws-claude__awsSonnet3_7`, 1);
           } else if (id.includes("claude-3-haiku")) {
             addToFamily(`aws-claude__awsHaiku`, 1);
+          } else if (id.includes("sonnet-4-5")) {
+            addToFamily(`aws-claude__awsSonnet4_5`, 1);
           } else if (id.includes("sonnet-4")) {
             addToFamily(`aws-claude__awsSonnet4`, 1);
           } else if (id.includes("claude-3-opus")) {
@@ -706,6 +709,7 @@ function getInfoForFamily(family: ModelFamily): BaseFamilyInfo {
           if (familyStats.get(`${family}__awsSonnet3_7`) || 0) variants.add("sonnet3.7");
           if (familyStats.get(`${family}__awsHaiku`) || 0) variants.add("haiku");
           if (familyStats.get(`${family}__awsSonnet4`) || 0) variants.add("sonnet4");
+		  if (familyStats.get(`${family}__awsSonnet4_5`) || 0) variants.add("sonnet4.5");
           
           info.enabledVariants = variants.size ? Array.from(variants).join(",") : undefined;
 

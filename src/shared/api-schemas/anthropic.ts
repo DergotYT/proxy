@@ -29,16 +29,77 @@ const AnthropicV1BaseSchema = z
   })
   .strip();
 
-// https://docs.anthropic.com/claude/reference/complete_post [deprecated]
-export const AnthropicV1TextSchema = AnthropicV1BaseSchema.merge(
-  z.object({
-    prompt: z.string(),
-    max_tokens_to_sample: z.coerce
-      .number()
-      .int()
-      .transform((v) => Math.min(v, CLAUDE_OUTPUT_MAX)),
+const AnthropicV1TextContent = z
+  .object({
+    type: z.literal("text"),
+    text: z.string(),
+    signature: z.string().optional(),
+    thinking: z.any().optional(),
+    cache_control: z.object({
+      type: z.literal("ephemeral"),
+      ttl: z.enum(["5m", "1h"]).optional(),
+    }).optional(),
   })
-);
+  .strict();
+
+const AnthropicV1ImageContent = z
+  .object({
+    type: z.literal("image"),
+    source: z
+      .object({
+        type: z.union([z.literal("base64"), z.literal("url")]),
+        media_type: z.string().max(100).optional(),
+        data: z.string(),
+        url: z.string().url().optional(),
+      })
+      .strict(),
+    cache_control: z.object({
+      type: z.literal("ephemeral"),
+      ttl: z.enum(["5m", "1h"]).optional(),
+    }).optional(),
+  })
+  .strict();
+
+const AnthropicV1ToolUseContent = z
+  .object({
+    type: z.literal("tool_use"),
+    id: z.string().optional(),
+    name: z.string().optional(),
+    input: z.record(z.any()).optional(),
+    cache_control: z.object({
+      type: z.literal("ephemeral"),
+      ttl: z.enum(["5m", "1h"]).optional(),
+    }).optional(),
+  })
+  .strict();
+
+const AnthropicV1ToolResultContent = z
+  .object({
+    type: z.literal("tool_result"),
+    tool_use_id: z.string(),
+    is_error: z.boolean().optional(),
+    content: z.union([
+      z.string(),
+      z.array(z.union([AnthropicV1TextContent, AnthropicV1ImageContent])),
+    ]).optional(),
+    cache_control: z.object({
+      type: z.literal("ephemeral"),
+      ttl: z.enum(["5m", "1h"]).optional(),
+    }).optional(),
+  })
+  .strict();
+
+const AnthropicV1ThinkingContent = z
+  .object({
+    type: z.literal("thinking"),
+    thinking: z.any().optional(),
+    signature: z.string().optional(),
+    cache_control: z.object({
+      type: z.literal("ephemeral"),
+      ttl: z.enum(["5m", "1h"]).optional(),
+    }).optional(),
+  })
+  .strict();
 
 const AnthropicV1BaseContentSchema = z.union([
   z.object({ type: z.literal("text"), text: z.string() }),
@@ -54,22 +115,11 @@ const AnthropicV1BaseContentSchema = z.union([
 
 const AnthropicV1MessageMultimodalContentSchema = z.array(
   z.union([
-    AnthropicV1BaseContentSchema,
-    z.object({
-      type: z.literal("tool_use"),
-      id: z.string(),
-      name: z.string(),
-      input: z.object({}).passthrough(),
-    }),
-    z.object({
-      type: z.literal("tool_result"),
-      tool_use_id: z.string(),
-      is_error: z.boolean().optional(),
-      content: z.union([
-        z.string(),
-        z.array(AnthropicV1BaseContentSchema)
-      ]).optional(),
-    }),
+    AnthropicV1TextContent,
+    AnthropicV1ImageContent,
+    AnthropicV1ToolUseContent,
+    AnthropicV1ToolResultContent,
+    AnthropicV1ThinkingContent,
   ])
 );
 
@@ -101,6 +151,17 @@ export const AnthropicV1MessagesSchema = AnthropicV1BaseSchema.merge(
     }).optional(),
   })
 );
+// https://docs.anthropic.com/claude/reference/complete_post [deprecated]
+export const AnthropicV1TextSchema = AnthropicV1BaseSchema.merge(
+  z.object({
+    prompt: z.string(),
+    max_tokens_to_sample: z.coerce
+      .number()
+      .int()
+      .transform((v) => Math.min(v, CLAUDE_OUTPUT_MAX)),
+  })
+);
+
 export type AnthropicChatMessage = z.infer<
   typeof AnthropicV1MessagesSchema
 >["messages"][0];

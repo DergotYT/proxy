@@ -44,17 +44,18 @@ export class GcpKeyChecker extends KeyCheckerBase<GcpKey> {
         this.invokeModel("claude-3-opus@20240229", key, true),
         this.invokeModel("claude-opus-4-1@20250805", key, true),
         this.invokeModel("claude-3-5-sonnet-v2@20241022", key, true),
+        this.invokeModel("claude-sonnet-4-5@20250929", key, true),
       ];
 
-      const [sonnet, haiku, opus3, opus41, sonnet35] = await Promise.all(checks);
+      const [sonnet, haiku, opus3, opus41, sonnet35, sonnet45] = await Promise.all(checks);
 
       this.log.debug(
-        { key: key.hash, sonnet, haiku, opus3, opus41, sonnet35 },
+        { key: key.hash, sonnet, haiku, opus3, opus41, sonnet35, sonnet45 },
         "GCP model initial tests complete."
       );
 
       const families: GcpModelFamily[] = [];
-      if (sonnet || sonnet35 || haiku) families.push("gcp-claude");
+      if (sonnet || sonnet35 || sonnet45 || haiku) families.push("gcp-claude");
       if (opus3 || opus41) families.push("gcp-claude-opus");
 
       if (families.length === 0) {

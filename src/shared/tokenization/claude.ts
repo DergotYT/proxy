@@ -69,6 +69,7 @@ async function getTokenCountForMessages({
           break;
        case "tool_use":
        case "tool_result":
+       case "thinking":
           break;
         default:
           throw new Error(`Unsupported Anthropic content type.`);
