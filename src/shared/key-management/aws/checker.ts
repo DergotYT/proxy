@@ -28,6 +28,7 @@ const KNOWN_MODEL_IDS: ModuleAliasTuple[] = [
   ["anthropic.claude-sonnet-4-20250514-v1:0"],
   ["anthropic.claude-opus-4-20250514-v1:0"],
   ["anthropic.claude-opus-4-1-20250805-v1:0"],
+  ["anthropic.claude-sonnet-4-5-20250929-v1:0"],
   ["mistral.mistral-7b-instruct-v0:2"],
   ["mistral.mixtral-8x7b-instruct-v0:1"],
   ["mistral.mistral-large-2402-v1:0"],

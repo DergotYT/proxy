@@ -33,6 +33,7 @@ const getModelsResponse = () => {
     "claude-sonnet-4@20250514",
     "claude-opus-4@20250514",
     "claude-opus-4-1@20250805",
+    "claude-sonnet-4-5@20250929",
   ];
 
   const models = variants.map((id) => ({
@@ -243,6 +244,16 @@ function maybeReassignModel(req: Request) {
       switch (flavor) {
         case "opus":
           req.body.model = "claude-opus-4-1@20250805";
+          return;
+        default:
+          req.body.model = DEFAULT_MODEL;
+      }
+      break;
+
+    case "4.5":
+      switch (flavor) {
+        case "sonnet":
+          req.body.model = "claude-sonnet-4-5@20250929";
           return;
         default:
           req.body.model = DEFAULT_MODEL;

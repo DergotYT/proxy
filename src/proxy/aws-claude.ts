@@ -337,6 +337,16 @@ function maybeReassignModel(req: Request) {
         // No sonnet or haiku variants for 4.1 yet
       }
       break;
+    case "4.5":
+      // Mapping "claude-4.5-..." variants to their actual AWS Bedrock IDs
+      // as defined in src/shared/claude-models.ts.
+      switch (name) {
+        case "sonnet":
+          req.body.model = "anthropic.claude-sonnet-4-5-20250929-v1:0";
+          return;
+        // No opus or haiku variants for 4.5 yet
+      }
+      break;
   }
 
   throw new Error(`Provided model name (${model}) could not be mapped to a known AWS Claude model ID.`);
