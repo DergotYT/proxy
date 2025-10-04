@@ -13,7 +13,7 @@ export function isGlmModel(model: string): boolean {
  */
 export function isGlmThinkingModel(model: string): boolean {
   // GLM-4.5 and GLM-Z1 series support thinking mode
-  return model.includes("glm-4.5") || model.includes("glm-z1");
+  return model.includes("glm-4.5") || model.includes("glm-z1") || model.includes("glm-4.6");
 }
 
 /**

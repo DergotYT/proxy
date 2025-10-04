@@ -102,7 +102,9 @@ const textToChatPreprocessor = createPreprocessorMiddleware(
  */
 const preprocessAwsTextRequest: RequestHandler = (req, res, next) => {
   const model = req.body.model;
-  const isClaude4Model = model?.includes("claude-sonnet-4") || model?.includes("claude-opus-4");
+  const isClaude4Model =
+    model?.includes("claude-sonnet-4") ||
+    model?.includes("claude-opus-4");
   if (model?.includes("claude-3") || isClaude4Model) {
     textToChatPreprocessor(req, res, next);
   } else {
@@ -126,7 +128,9 @@ const oaiToAwsChatPreprocessor = createPreprocessorMiddleware(
  */
 const preprocessOpenAICompatRequest: RequestHandler = (req, res, next) => {
   const model = req.body.model;
-  const isClaude4Model = model?.includes("claude-sonnet-4") || model?.includes("claude-opus-4");
+  const isClaude4Model =
+    model?.includes("claude-sonnet-4") ||
+    model?.includes("claude-opus-4");
   if (model?.includes("claude-3") || isClaude4Model) {
     oaiToAwsChatPreprocessor(req, res, next);
   } else {

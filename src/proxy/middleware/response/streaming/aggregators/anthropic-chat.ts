@@ -8,7 +8,12 @@ export type AnthropicChatCompletionResponse = {
   model: string;
   stop_reason: string | null;
   stop_sequence: string | null;
-  usage: { input_tokens: number; output_tokens: number };
+  usage: {
+    input_tokens: number;
+    output_tokens: number;
+    cache_creation_input_tokens?: number;
+    cache_read_input_tokens?: number;
+  };
 };
 
 /**
@@ -41,6 +46,24 @@ export function mergeEventsForAnthropicChat(
     acc.stop_reason = event.choices[0].finish_reason ?? "";
     if (event.choices[0].delta.content) {
       acc.content[0].text += event.choices[0].delta.content;
+    }
+
+    // OpenAI events may include usage data (extended by our transformer)
+    // Usage tokens should be set to the latest value, not accumulated
+    // (they represent total counts, not deltas)
+    if ((event as any).usage) {
+      if ((event as any).usage.input_tokens !== undefined) {
+        acc.usage.input_tokens = (event as any).usage.input_tokens;
+      }
+      if ((event as any).usage.output_tokens !== undefined) {
+        acc.usage.output_tokens = (event as any).usage.output_tokens;
+      }
+      if ((event as any).usage.cache_creation_input_tokens !== undefined) {
+        acc.usage.cache_creation_input_tokens = (event as any).usage.cache_creation_input_tokens;
+      }
+      if ((event as any).usage.cache_read_input_tokens !== undefined) {
+        acc.usage.cache_read_input_tokens = (event as any).usage.cache_read_input_tokens;
+      }
     }
 
     return acc;

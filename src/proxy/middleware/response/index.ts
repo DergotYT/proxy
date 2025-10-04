@@ -1174,8 +1174,107 @@ const countResponseTokens: ProxyResHandlerWithBody = async (
   try {
     assertJsonResponse(body);
     const service = req.outboundApi;
-    const completion = getCompletionFromBody(req, body);
-    const tokens = await countTokens({ req, completion, service });
+    // Try to get token counts from the API response first
+    let tokens: { token_count: number; tokenizer: string; reasoning_tokens?: number } | null = null;
+
+    // Anthropic API returns usage data in the response
+    if (service === "anthropic-chat" && body.usage) {
+      tokens = {
+        token_count: body.usage.output_tokens || 0,
+        tokenizer: "anthropic-api",
+      };
+      req.log.debug(
+        { service, outputTokens: tokens.token_count, usage: body.usage },
+        "Got output token count from Anthropic API response"
+      );
+
+      // Sanity check: if request had cache_control, expect cache metrics
+      if (req.body.system || req.body.tools || req.body.messages) {
+        const hasCacheControl = checkForCacheControl(req.body);
+        if (hasCacheControl) {
+          const cacheRead = body.usage.cache_read_input_tokens || 0;
+          const cacheCreation = body.usage.cache_creation_input_tokens || 0;
+          if (cacheRead === 0 && cacheCreation === 0) {
+            req.log.error(
+              { keyHash: req.key?.hash, usage: body.usage },
+              "CACHE SANITY CHECK FAILED: Request had cache_control but received NO cache metrics from Anthropic API"
+            );
+          }
+        }
+      }
+    }
+    // AWS Bedrock returns usage data in the response (same format as Anthropic)
+    else if (req.service === "aws" && service === "anthropic-chat" && body.usage) {
+      tokens = {
+        token_count: body.usage.output_tokens || 0,
+        tokenizer: "aws-bedrock-api",
+      };
+      req.log.debug(
+        { service, outputTokens: tokens.token_count, usage: body.usage },
+        "Got output token count from AWS Bedrock API response"
+      );
+
+      // Sanity check: if request had cache_control, expect cache metrics
+      if (req.body.system || req.body.tools || req.body.messages) {
+        const hasCacheControl = checkForCacheControl(req.body);
+        if (hasCacheControl) {
+          const cacheRead = body.usage.cache_read_input_tokens || 0;
+          const cacheCreation = body.usage.cache_creation_input_tokens || 0;
+          if (cacheRead === 0 && cacheCreation === 0) {
+            req.log.error(
+              { keyHash: req.key?.hash, usage: body.usage },
+              "CACHE SANITY CHECK FAILED: Request had cache_control but received NO cache metrics from AWS Bedrock API"
+            );
+          }
+        }
+      }
+    }
+    // GCP Vertex AI returns usage data in the response
+    // For Anthropic models, GCP returns Anthropic format (usage.output_tokens)
+    // For Gemini models, GCP returns GCP format (usageMetadata.candidatesTokenCount)
+    else if (req.service === "gcp") {
+      if (service === "anthropic-chat" && body.usage?.output_tokens) {
+        tokens = {
+          token_count: body.usage.output_tokens || 0,
+          tokenizer: "gcp-anthropic-api",
+        };
+        req.log.debug(
+          { service, outputTokens: tokens.token_count, usage: body.usage },
+          "Got output token count from GCP Vertex AI (Anthropic format)"
+        );
+
+        // Sanity check: if request had cache_control, expect cache metrics
+        if (req.body.system || req.body.tools || req.body.messages) {
+          const hasCacheControl = checkForCacheControl(req.body);
+          if (hasCacheControl) {
+            const cacheRead = body.usage.cache_read_input_tokens || 0;
+            const cacheCreation = body.usage.cache_creation_input_tokens || 0;
+            if (cacheRead === 0 && cacheCreation === 0) {
+              req.log.error(
+                { keyHash: req.key?.hash, usage: body.usage },
+                "CACHE SANITY CHECK FAILED: Request had cache_control but received NO cache metrics from GCP Vertex AI API"
+              );
+            }
+          }
+        }
+      } else if (body.usageMetadata) {
+        tokens = {
+          token_count: body.usageMetadata.candidatesTokenCount || 0,
+          tokenizer: "gcp-vertex-api",
+        };
+        req.log.debug(
+          { service, outputTokens: tokens.token_count, usageMetadata: body.usageMetadata },
+          "Got output token count from GCP Vertex AI (Gemini format)"
+        );
+      }
+    }
+    // OpenAI and similar services return usage data
+    else if (body.usage?.completion_tokens) {
+      tokens = {
+        token_count: body.usage.completion_tokens,
+        tokenizer: "api-usage-data",
+      };
+
     
     if (req.service === "openai" || req.service === "azure" || req.service === "deepseek" || req.service === "glm" || req.service === "cohere" || req.service === "qwen") {
       // O1 consumes (a significant amount of) invisible tokens for the chain-
@@ -1184,6 +1283,23 @@ const countResponseTokens: ProxyResHandlerWithBody = async (
       tokens.reasoning_tokens =
         body.usage?.completion_tokens_details?.reasoning_tokens;
     }
+	
+	req.log.debug(
+      { service, outputTokens: tokens.token_count, usage: body.usage },
+      "Got output token count from API usage data"
+    );
+    }
+
+    // Fall back to local tokenization if no usage data is available
+    if (!tokens) {
+      const completion = getCompletionFromBody(req, body);
+      tokens = await countTokens({ req, completion, service });
+      req.log.debug(
+        { service, outputTokens: tokens.token_count },
+        "Counted output tokens locally (no API usage data)"
+      );
+    }
+
 
     req.log.debug(
       { service, prevOutputTokens: req.outputTokens, tokens },
@@ -1272,6 +1388,36 @@ function getAwsErrorType(header: string | string[] | undefined) {
   const val = String(header).match(/^(\w+):?/)?.[1];
   return val || String(header);
 }
+
+function checkForCacheControl(body: any): boolean {
+  // Check tools
+  if (Array.isArray(body.tools)) {
+    for (const tool of body.tools) {
+      if (tool.cache_control) return true;
+    }
+  }
+
+  // Check system blocks
+  if (Array.isArray(body.system)) {
+    for (const block of body.system) {
+      if (block.cache_control) return true;
+    }
+  }
+
+  // Check message content blocks
+  if (Array.isArray(body.messages)) {
+    for (const message of body.messages) {
+      if (Array.isArray(message.content)) {
+        for (const block of message.content) {
+          if (block.cache_control) return true;
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
 
 function assertJsonResponse(body: any): asserts body is Record<string, any> {
   if (typeof body !== "object") {

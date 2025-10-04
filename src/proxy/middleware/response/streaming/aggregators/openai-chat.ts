@@ -10,6 +10,11 @@ export type OpenAiChatCompletionResponse = {
     finish_reason: string | null;
     index: number;
   }[];
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  };
 };
 
 /**
@@ -50,6 +55,17 @@ export function mergeEventsForOpenAIChat(
     acc.choices[0].finish_reason = event.choices[0].finish_reason;
     if (event.choices[0].delta.content) {
       acc.choices[0].message.content += event.choices[0].delta.content;
+    }
+
+    // Accumulate usage data from events (OpenAI may send this in the final event)
+    if ((event as any).usage) {
+      if (!acc.usage) {
+        acc.usage = {};
+      }
+      const usage = (event as any).usage;
+      if (usage.prompt_tokens) acc.usage.prompt_tokens = usage.prompt_tokens;
+      if (usage.completion_tokens) acc.usage.completion_tokens = usage.completion_tokens;
+      if (usage.total_tokens) acc.usage.total_tokens = usage.total_tokens;
     }
 
     return acc;

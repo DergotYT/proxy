@@ -32,8 +32,9 @@ export const addKey: ProxyReqMutator = (manager) => {
 
   if (inboundApi === outboundApi) {
     // Pass streaming information for GPT-5 models that require verified keys for streaming
+	// Pass request body for cache-aware key selection (Anthropic, AWS, GCP)
     const isStreaming = body.stream === true;
-    assignedKey = keyPool.get(body.model, service, needsMultimodal, isStreaming);
+    assignedKey = keyPool.get(body.model, service, needsMultimodal, isStreaming, body);
   } else {
     switch (outboundApi) {
       // If we are translating between API formats we may need to select a model
@@ -45,7 +46,7 @@ export const addKey: ProxyReqMutator = (manager) => {
       case "mistral-ai":
       case "mistral-text":
       case "google-ai":
-        assignedKey = keyPool.get(body.model, service);
+        assignedKey = keyPool.get(body.model, service, undefined, undefined, body);
         break;
       case "openai-text":
         assignedKey = keyPool.get("gpt-3.5-turbo-instruct", service);

@@ -288,6 +288,15 @@ type Config = {
   /** Google Sheets spreadsheet ID. */
   googleSheetsSpreadsheetId?: string;
   /** Whether to periodically check keys for usage and validity. */
+    /**
+   * Whether to use remote API token counting endpoints for Anthropic, AWS
+   * Bedrock, and GCP Vertex AI. When enabled, the proxy will use the provider's
+   * token counting API to get accurate token counts for prompts (including
+   * images). Output tokens are always counted from API responses when available.
+   * Falls back to local tokenization if remote counting fails.
+   */
+  useRemoteTokenCounting: boolean;
+
   checkKeys: boolean;
   /** Whether to publicly show total token costs on the info page. */
   showTokenCosts: boolean;
@@ -571,6 +580,7 @@ export const config: Config = {
   ),
   logLevel: getEnvWithDefault("LOG_LEVEL", "info"),
   checkKeys: getEnvWithDefault("CHECK_KEYS", !isDev),
+  useRemoteTokenCounting: getEnvWithDefault("USE_REMOTE_TOKEN_COUNTING", true),
   showTokenCosts: getEnvWithDefault("SHOW_TOKEN_COSTS", false),
   allowAwsLogging: getEnvWithDefault("ALLOW_AWS_LOGGING", false),
   promptLogging: getEnvWithDefault("PROMPT_LOGGING", false),
