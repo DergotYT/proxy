@@ -5,6 +5,11 @@ import { logger } from "../../../logger";
 import { AnthropicModelFamily, getClaudeModelFamily } from "../../models";
 import { AnthropicKeyChecker } from "./checker";
 import { PaymentRequiredError } from "../../errors";
+import {
+  generateCacheFingerprint,
+  recordCacheUsage,
+  getCachedKeyHash,
+} from "../cache-tracker";
 
 export type AnthropicKeyUpdate = Omit<
   Partial<AnthropicKey>,
@@ -136,7 +141,7 @@ export class AnthropicKeyProvider implements KeyProvider<AnthropicKey> {
     return this.keys.map((k) => Object.freeze({ ...k, key: undefined }));
   }
 
-  public get(rawModel: string) {
+  public get(rawModel: string, _streaming?: boolean, requestBody?: any) {
     this.log.debug({ model: rawModel }, "Selecting key");
     const needsMultimodal = rawModel.endsWith("-multimodal");
 
@@ -152,7 +157,44 @@ export class AnthropicKeyProvider implements KeyProvider<AnthropicKey> {
       );
     }
 
+    // Generate cache fingerprint if request body contains cache_control
+    const cacheFingerprint = requestBody
+      ? generateCacheFingerprint(requestBody)
+      : null;
+
+    // Try to get cached key if we have a fingerprint
+    let preferredKeyHash: string | null = null;
+    let matchedFingerprint: string | null = null;
+    if (cacheFingerprint) {
+      const cacheResult = getCachedKeyHash(cacheFingerprint);
+      if (cacheResult) {
+        preferredKeyHash = cacheResult.keyHash;
+        matchedFingerprint = cacheResult.matchedFingerprint;
+        // Check if the cached key is still available
+        const cachedKey = availableKeys.find((k) => k.hash === preferredKeyHash);
+        if (cachedKey) {
+          this.log.debug(
+            {
+              requestedModel: rawModel,
+              cacheFingerprint,
+              keyHash: preferredKeyHash,
+            },
+            "Using cached key for prompt caching optimization"
+          );
+        } else {
+          // Cached key no longer available
+          preferredKeyHash = null;
+          matchedFingerprint = null;
+          this.log.debug(
+            { cacheFingerprint, keyHash: preferredKeyHash },
+            "Cached key not available, selecting new key"
+          );
+        }
+      }
+    }
+
     // Select a key, from highest priority to lowest priority:
+    // 0. Cache affinity (if we have a cached key preference)
     // 1. Keys which are not rate limit locked
     // 2. Keys with the highest tier
     // 3. Keys which are not pozzed
@@ -161,6 +203,12 @@ export class AnthropicKeyProvider implements KeyProvider<AnthropicKey> {
     const now = Date.now();
 
     const keysByPriority = availableKeys.sort((a, b) => {
+      // Highest priority: cache affinity
+      if (preferredKeyHash) {
+        if (a.hash === preferredKeyHash) return -1;
+        if (b.hash === preferredKeyHash) return 1;
+      }
+
       const aLockoutPeriod = getKeyLockout(a);
       const bLockoutPeriod = getKeyLockout(b);
 
@@ -183,6 +231,13 @@ export class AnthropicKeyProvider implements KeyProvider<AnthropicKey> {
     const selectedKey = keysByPriority[0];
     selectedKey.lastUsed = now;
     this.throttle(selectedKey.hash);
+
+    // Record cache usage for future requests
+    // Use matchedFingerprint if we had a cache hit, otherwise use the current fingerprint
+    if (cacheFingerprint) {
+      recordCacheUsage(matchedFingerprint || cacheFingerprint, selectedKey.hash);
+    }
+
     return { ...selectedKey };
   }
 

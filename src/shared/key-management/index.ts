@@ -61,7 +61,7 @@ for service-agnostic functionality.
 export interface KeyProvider<T extends Key = Key> {
   readonly service: LLMService;
   init(): void;
-  get(model: string, streaming?: boolean): T;
+  get(model: string, streaming?: boolean, requestBody?: any): T;
   list(): Omit<T, "key">[];
   disable(key: T): void;
   update(hash: string, update: Partial<T>): void;

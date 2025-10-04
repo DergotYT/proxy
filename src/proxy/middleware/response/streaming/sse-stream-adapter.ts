@@ -50,12 +50,32 @@ export class SSEStreamAdapter extends Transform {
           const event = Buffer.from(bytes, "base64").toString("utf8");
           const eventObj = JSON.parse(event);
 
+          // AWS Bedrock includes usage metrics in the event stream headers
+          // Extract and attach them to the event object for downstream processing
+          const invocationMetrics = headers["amazon-bedrock-invocationMetrics"];
+          if (invocationMetrics?.value) {
+            try {
+              const metricsStr = typeof invocationMetrics.value === 'string'
+                ? invocationMetrics.value
+                : JSON.stringify(invocationMetrics.value);
+              const metricsObj = JSON.parse(metricsStr);
+              eventObj["amazon-bedrock-invocationMetrics"] = metricsObj;
+            } catch (e) {
+              this.log.warn(
+                { invocationMetrics: invocationMetrics.value },
+                "Failed to parse AWS invocationMetrics"
+              );
+            }
+          }
+
+          const eventWithMetrics = JSON.stringify(eventObj);
+
           if ("completion" in eventObj) {
-            return ["event: completion", `data: ${event}`].join(`\n`);
+            return ["event: completion", `data: ${eventWithMetrics}`].join(`\n`);
           } else if (eventObj.type) {
-            return [`event: ${eventObj.type}`, `data: ${event}`].join(`\n`);
+            return [`event: ${eventObj.type}`, `data: ${eventWithMetrics}`].join(`\n`);
           } else {
-            return `data: ${event}`;
+            return `data: ${eventWithMetrics}`;
           }
         }
       // noinspection FallThroughInSwitchStatementJS -- non-JSON data is unexpected

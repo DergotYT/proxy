@@ -21,6 +21,17 @@ import {
   MistralAIChatMessage,
   OpenAIChatMessage,
 } from "../api-schemas";
+import { countTokensRemote as countAnthropicTokensRemote } from "./anthropic-remote";
+import { countTokensRemote as countAwsTokensRemote } from "./aws-remote";
+import { countTokensRemote as countGcpTokensRemote } from "./gcp-remote";
+import { AnthropicKey } from "../key-management/anthropic/provider";
+import { AwsBedrockKey } from "../key-management/aws/provider";
+import { GcpKey } from "../key-management/gcp/provider";
+import { logger } from "../../logger";
+import { config } from "../../config";
+import { findByAnthropicId } from "../claude-models";
+
+const log = logger.child({ module: "tokenizer" });
 
 export async function init() {
   initClaude();
@@ -99,6 +110,87 @@ export async function countTokens({
   completion,
 }: TokenCountRequest): Promise<TokenCountResult> {
   const time = process.hrtime();
+  // For prompt counting, try remote APIs first (only when enabled, have a key, and counting prompts)
+  if (config.useRemoteTokenCounting && prompt && req.key) {
+    try {
+      switch (service) {
+        case "anthropic-chat": {
+          if (req.service === "anthropic" && req.key.service === "anthropic") {
+            const result = await countAnthropicTokensRemote(
+              {
+                model: req.body.model,
+                messages: prompt.messages,
+                system: prompt.system,
+                tools: req.body.tools,
+              },
+              req.key as AnthropicKey
+            );
+            return { ...result, tokenization_duration_ms: getElapsedMs(time) };
+          }
+          break;
+        }
+        case "anthropic-text": {
+          if (req.service === "anthropic" && req.key.service === "anthropic") {
+            // Anthropic's API doesn't support text completion counting, fall through to local
+            break;
+          }
+          break;
+        }
+      }
+
+      // For AWS Bedrock services, use AWS token counting
+      if (req.service === "aws" && req.key.service === "aws") {
+        if (service === "anthropic-chat") {
+          // Convert Anthropic model ID to AWS Bedrock model ID
+          const anthropicModelId = req.body.model;
+          const claudeMapping = findByAnthropicId(anthropicModelId);
+          const awsModelId = claudeMapping?.awsId || anthropicModelId;
+
+          // Build the request body in Anthropic format - must include all required fields
+          const bodyObj: any = {
+            messages: req.body.messages,
+            max_tokens: req.body.max_tokens,
+            anthropic_version: req.body.anthropic_version || "bedrock-2023-05-31",
+          };
+          if (req.body.system) bodyObj.system = req.body.system;
+          if (req.body.tools) bodyObj.tools = req.body.tools;
+          if (req.body.tool_choice) bodyObj.tool_choice = req.body.tool_choice;
+
+          // AWS expects the body as a base64-encoded string
+          const bodyJson = JSON.stringify(bodyObj);
+          const bodyBase64 = Buffer.from(bodyJson, "utf-8").toString("base64");
+
+          const result = await countAwsTokensRemote(
+            awsModelId,
+            {
+              input: {
+                invokeModel: {
+                  body: bodyBase64,
+                },
+              },
+            },
+            req.key as AwsBedrockKey
+          );
+          return { ...result, tokenization_duration_ms: getElapsedMs(time) };
+        }
+      }
+
+      // For GCP Vertex AI services, use GCP token counting
+      if (req.service === "gcp" && req.key.service === "gcp") {
+        // GCP uses a different format, would need transformation
+        // For now, fall through to local counting
+      }
+    } catch (error) {
+      // Fall through to local tokenization
+      log.debug(
+        { error: (error as Error).message, service },
+        "Remote token counting failed, using local tokenizer"
+      );
+    }
+  }
+
+  // Fall back to local tokenization
+
   switch (service) {
     case "anthropic-chat":
     case "anthropic-text":

@@ -26,7 +26,7 @@ export async function getTokenCount(
     return getTokenCountForMessages(prompt);
   }
 
-  if (prompt.length > 800000) {
+  if (prompt.length > 5000000) {
     throw new Error("Content is too large to tokenize.");
   }
 
@@ -59,7 +59,7 @@ async function getTokenCountForMessages({
       switch (part.type) {
         case "text":
           const { text } = part;
-          if (text.length > 800000 || numTokens > 200000) {
+          if (text.length > 5000000 || numTokens > 1200000) {
             throw new Error("Text content is too large to tokenize.");
           }
           numTokens += encoder.encode(text.normalize("NFKC"), "all").length;

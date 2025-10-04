@@ -6,6 +6,11 @@ import { GcpModelFamily, getGcpModelFamily } from "../../models";
 import { createGenericGetLockoutPeriod, Key, KeyProvider } from "..";
 import { prioritizeKeys } from "../prioritize-keys";
 import { GcpKeyChecker } from "./checker";
+import {
+  generateCacheFingerprint,
+  recordCacheUsage,
+  getCachedKeyHash,
+} from "../cache-tracker";
 
 // GcpKeyUsage is removed, tokenUsage from base Key interface will be used.
 export interface GcpKey extends Key {
@@ -90,7 +95,7 @@ export class GcpKeyProvider implements KeyProvider<GcpKey> {
     return this.keys.map((k) => Object.freeze({ ...k, key: undefined }));
   }
 
-  public get(model: string) {
+  public get(model: string, _streaming?: boolean, requestBody?: any) {
     const neededFamily = getGcpModelFamily(model);
 
     // this is a horrible mess
@@ -115,6 +120,42 @@ export class GcpKeyProvider implements KeyProvider<GcpKey> {
       );
     });
 
+    // Generate cache fingerprint if request body contains cache_control
+    const cacheFingerprint = requestBody
+      ? generateCacheFingerprint(requestBody)
+      : null;
+
+    // Try to get cached key if we have a fingerprint
+    let preferredKeyHash: string | null = null;
+    let matchedFingerprint: string | null = null;
+    if (cacheFingerprint) {
+      const cacheResult = getCachedKeyHash(cacheFingerprint);
+      if (cacheResult) {
+        preferredKeyHash = cacheResult.keyHash;
+        matchedFingerprint = cacheResult.matchedFingerprint;
+        // Check if the cached key is still available
+        const cachedKey = availableKeys.find((k) => k.hash === preferredKeyHash);
+        if (cachedKey) {
+          this.log.debug(
+            {
+              requestedModel: model,
+              cacheFingerprint,
+              keyHash: preferredKeyHash,
+            },
+            "Using cached key for prompt caching optimization"
+          );
+        } else {
+          // Cached key no longer available
+          preferredKeyHash = null;
+          matchedFingerprint = null;
+          this.log.debug(
+            { cacheFingerprint, keyHash: preferredKeyHash },
+            "Cached key not available, selecting new key"
+          );
+        }
+      }
+    }
+
     this.log.debug(
       {
         model,
@@ -124,6 +165,8 @@ export class GcpKeyProvider implements KeyProvider<GcpKey> {
         needsSonnet35,
         availableKeys: availableKeys.length,
         totalKeys: this.keys.length,
+        cacheFingerprint,
+        hasCachedKey: !!preferredKeyHash,
       },
       "Selecting GCP key"
     );
@@ -134,9 +177,28 @@ export class GcpKeyProvider implements KeyProvider<GcpKey> {
       );
     }
 
-    const selectedKey = prioritizeKeys(availableKeys)[0];
+    /**
+     * Comparator for prioritizing keys based on cache affinity.
+     */
+    const keyComparator = (a: GcpKey, b: GcpKey) => {
+      // Highest priority: cache affinity
+      if (preferredKeyHash) {
+        if (a.hash === preferredKeyHash) return -1;
+        if (b.hash === preferredKeyHash) return 1;
+      }
+      return 0;
+    };
+
+    const selectedKey = prioritizeKeys(availableKeys, keyComparator)[0];
     selectedKey.lastUsed = Date.now();
     this.throttle(selectedKey.hash);
+
+    // Record cache usage for future requests
+    // Use matchedFingerprint if we had a cache hit, otherwise use the current fingerprint
+    if (cacheFingerprint) {
+      recordCacheUsage(matchedFingerprint || cacheFingerprint, selectedKey.hash);
+    }
+
     return { ...selectedKey };
   }
 

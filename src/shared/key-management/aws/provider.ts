@@ -7,6 +7,11 @@ import { findByAnthropicId } from "../../claude-models";
 import { createGenericGetLockoutPeriod, Key, KeyProvider } from "..";
 import { prioritizeKeys } from "../prioritize-keys";
 import { AwsKeyChecker } from "./checker";
+import {
+  generateCacheFingerprint,
+  recordCacheUsage,
+  getCachedKeyHash,
+} from "../cache-tracker";
 
 // AwsBedrockKeyUsage is removed, tokenUsage from base Key interface will be used.
 export interface AwsBedrockKey extends Key {
@@ -90,14 +95,14 @@ export class AwsBedrockKeyProvider implements KeyProvider<AwsBedrockKey> {
     return this.keys.map((k) => Object.freeze({ ...k, key: undefined }));
   }
 
-  public get(model: string) {
+  public get(model: string, _streaming?: boolean, requestBody?: any) {
     let neededVariantId = model;
     // This function accepts both Anthropic/Mistral IDs and AWS IDs.
     // Generally all AWS model IDs are supersets of the original vendor IDs.
     // Claude 2 is the only model that breaks this convention; Anthropic calls
     // it claude-2 but AWS calls it claude-v2.
     if (model.includes("claude-2")) neededVariantId = "claude-v2";
-    
+
     // For Claude models, try to resolve aliases to AWS model IDs
     if (model.includes("claude") && !model.includes("anthropic.")) {
       const claudeMapping = findByAnthropicId(model);
@@ -105,7 +110,7 @@ export class AwsBedrockKeyProvider implements KeyProvider<AwsBedrockKey> {
         neededVariantId = claudeMapping.awsId;
       }
     }
-    
+
     const neededFamily = getAwsBedrockModelFamily(model);
 
     const availableKeys = this.keys.filter((k) => {
@@ -122,6 +127,42 @@ export class AwsBedrockKeyProvider implements KeyProvider<AwsBedrockKey> {
       );
     });
 
+    // Generate cache fingerprint if request body contains cache_control
+    const cacheFingerprint = requestBody
+      ? generateCacheFingerprint(requestBody)
+      : null;
+
+    // Try to get cached key if we have a fingerprint
+    let preferredKeyHash: string | null = null;
+    let matchedFingerprint: string | null = null;
+    if (cacheFingerprint) {
+      const cacheResult = getCachedKeyHash(cacheFingerprint);
+      if (cacheResult) {
+        preferredKeyHash = cacheResult.keyHash;
+        matchedFingerprint = cacheResult.matchedFingerprint;
+        // Check if the cached key is still available
+        const cachedKey = availableKeys.find((k) => k.hash === preferredKeyHash);
+        if (cachedKey) {
+          this.log.debug(
+            {
+              requestedModel: model,
+              cacheFingerprint,
+              keyHash: preferredKeyHash,
+            },
+            "Using cached key for prompt caching optimization"
+          );
+        } else {
+          // Cached key no longer available
+          preferredKeyHash = null;
+          matchedFingerprint = null;
+          this.log.debug(
+            { cacheFingerprint, keyHash: preferredKeyHash },
+            "Cached key not available, selecting new key"
+          );
+        }
+      }
+    }
+
     this.log.debug(
       {
         requestedModel: model,
@@ -129,6 +170,8 @@ export class AwsBedrockKeyProvider implements KeyProvider<AwsBedrockKey> {
         selectedFamily: neededFamily,
         totalKeys: this.keys.length,
         availableKeys: availableKeys.length,
+        cacheFingerprint,
+        hasCachedKey: !!preferredKeyHash,
       },
       "Selecting AWS key"
     );
@@ -140,22 +183,36 @@ export class AwsBedrockKeyProvider implements KeyProvider<AwsBedrockKey> {
     }
 
     /**
-     * Comparator for prioritizing keys on inference profile compatibility.
-     * Requests made via inference profiles have higher rate limits so we want
-     * to use keys with compatible inference profiles first.
+     * Comparator for prioritizing keys based on:
+     * 1. Cache affinity (if we have a cached key preference)
+     * 2. Inference profile compatibility
      */
-    const hasInferenceProfile = (
-      a: AwsBedrockKey,
-      b: AwsBedrockKey
-    ) => {
+    const keyComparator = (a: AwsBedrockKey, b: AwsBedrockKey) => {
+      // Highest priority: cache affinity
+      if (preferredKeyHash) {
+        if (a.hash === preferredKeyHash) return -1;
+        if (b.hash === preferredKeyHash) return 1;
+      }
+
+      // Second priority: inference profile compatibility
       const aMatch = +a.inferenceProfileIds.some((p) => p.includes(model));
       const bMatch = +b.inferenceProfileIds.some((p) => p.includes(model));
-      return aMatch - bMatch;
+      const profileDiff = bMatch - aMatch;
+      if (profileDiff !== 0) return profileDiff;
+
+      return 0;
     };
 
-    const selectedKey = prioritizeKeys(availableKeys, hasInferenceProfile)[0];
+    const selectedKey = prioritizeKeys(availableKeys, keyComparator)[0];
     selectedKey.lastUsed = Date.now();
     this.throttle(selectedKey.hash);
+
+    // Record cache usage for future requests
+    // Use matchedFingerprint if we had a cache hit, otherwise use the current fingerprint
+    if (cacheFingerprint) {
+      recordCacheUsage(matchedFingerprint || cacheFingerprint, selectedKey.hash);
+    }
+
     return { ...selectedKey };
   }
 

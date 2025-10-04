@@ -56,7 +56,7 @@ export function validateClaude41OpusParameters(req: Request): void {
   // If both are non-default, throw an error
   if (!tempIsDefault && !topPIsDefault) {
     throw new Error(
-      "Claude Opus 4.1 does not support both temperature and top_p parameters being set to non-default values simultaneously. " +
+      "Claude 4 does not support both temperature and top_p parameters being set to non-default values simultaneously. " +
       "Please specify only one of these parameters or set one to its default value (1.0)."
     );
   }
@@ -69,14 +69,11 @@ export function validateClaude41OpusParameters(req: Request): void {
 function isClaude41OpusModel(model: string): boolean {
   if (!model) return false;
   
-  // Anthropic API format
+  // opus
   if (model.includes("claude-opus-4-1")) return true;
   
-  // AWS Bedrock format
-  if (model.includes("anthropic.claude-opus-4-1")) return true;
-  
-  // GCP Vertex AI format
-  if (model.includes("claude-opus-4-1@")) return true;
+  // sonnet45
+  if (model.includes("claude-sonnet-4-5")) return true
   
   return false;
 }

@@ -20,7 +20,7 @@ export const signGcpRequest: ProxyReqMutator = async (manager) => {
   }
 
   const { model } = req.body;
-  const key: GcpKey = keyPool.get(model, "gcp") as GcpKey;
+  const key: GcpKey = keyPool.get(model, "gcp", undefined, undefined, req.body) as GcpKey;
 
   if (!key.accessToken || Date.now() > key.accessTokenExpiresAt) {
     const [token, durationSec] = await refreshGcpAccessToken(key);
@@ -38,6 +38,9 @@ export const signGcpRequest: ProxyReqMutator = async (manager) => {
 
   // TODO: This should happen in transform-outbound-payload.ts
   // TODO: Support tools
+  // Preserve anthropic_version if user provided it (for beta features)
+  const userAnthropicVersion = (req.body as any).anthropic_version;
+
   let strippedParams: Record<string, unknown>;
   strippedParams = AnthropicV1MessagesSchema.pick({
     messages: true,
@@ -50,11 +53,14 @@ export const signGcpRequest: ProxyReqMutator = async (manager) => {
     stream: true,
     tools: true,
     tool_choice: true,
-    thinking: true
+    thinking: true,
+    cache_control: true
   })
     .strip()
     .parse(req.body);
-  strippedParams.anthropic_version = "vertex-2023-10-16";
+
+  // Use user-provided version or default to vertex-2023-10-16
+  strippedParams.anthropic_version = userAnthropicVersion || "vertex-2023-10-16";
 
   const credential = await getCredentialsFromGcpKey(key);
 
@@ -63,6 +69,8 @@ export const signGcpRequest: ProxyReqMutator = async (manager) => {
   // stream adapter selects the correct transformer.
   manager.setHeader("anthropic-version", "2023-06-01");
 
+  // GCP Vertex AI uses body parameter anthropic_version (set above) for versioning,
+  // not anthropic-beta header. Beta features are enabled through body params.
   manager.setSignedRequest({
     method: "POST",
     protocol: "https:",

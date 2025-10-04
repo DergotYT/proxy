@@ -15,6 +15,11 @@ type GoogleAIStreamEvent = {
     tokenCount?: number;
     safetyRatings: { category: string; probability: string }[];
   }[];
+  usageMetadata?: {
+    promptTokenCount: number;
+    candidatesTokenCount: number;
+    totalTokenCount: number;
+  };
 };
 
 /**
@@ -49,7 +54,7 @@ export const googleAIToOpenAI: StreamingCompletionTransformer = (params) => {
     content = content.replace(/^(.*?): /, "").trim();
   }
 
-  const newEvent = {
+  const newEvent: any = {
     id: "goo-" + params.fallbackId,
     object: "chat.completion.chunk" as const,
     created: Date.now(),
@@ -62,6 +67,19 @@ export const googleAIToOpenAI: StreamingCompletionTransformer = (params) => {
       },
     ],
   };
+
+  // Extract usage metadata from GCP/Vertex AI responses
+  if (completionEvent.usageMetadata) {
+    newEvent.usage = {
+      prompt_tokens: completionEvent.usageMetadata.promptTokenCount,
+      completion_tokens: completionEvent.usageMetadata.candidatesTokenCount,
+      total_tokens: completionEvent.usageMetadata.totalTokenCount,
+    };
+    log.debug(
+      { usageMetadata: completionEvent.usageMetadata },
+      "Extracted usage from GCP usageMetadata"
+    );
+  }
 
   return { position: -1, event: newEvent };
 };
