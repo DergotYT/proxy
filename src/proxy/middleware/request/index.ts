@@ -17,7 +17,7 @@ export { validateContextSize } from "./preprocessors/validate-context-size";
 export { validateModelFamily } from "./preprocessors/validate-model-family";
 export { validateVision } from "./preprocessors/validate-vision";
 export { extractQwenExtraBody } from "./preprocessors/extract-qwen-extra-body";
-
+export { validateStreaming } from "./preprocessors/validate-streaming";
 // Proxy request mutators (runs every time request is dequeued, before proxying, usually for auth/signing)
 export { addKey, addKeyForEmbeddingsRequest } from "./mutators/add-key";
 export { addAzureKey } from "./mutators/add-azure-key";
